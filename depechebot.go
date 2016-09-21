@@ -32,7 +32,7 @@ func DepecheBot() {
 func init() {
 }
 
-func Init(telegramToken string, dbName string, StatesConfig map[StateIDType]State) {
+func Init(telegramToken string, dbName string, StatesConfig map[StateIDType]StateActions) {
 	var err error
 
 	db.InitDB(dbName)
@@ -56,7 +56,10 @@ func Init(telegramToken string, dbName string, StatesConfig map[StateIDType]Stat
 	SendChan = make(chan tgbotapi.Chattable, 100)
 	go func() {
 		for msg := range SendChan {
-			bot.Send(msg)
+			_, err := bot.Send(msg)
+			if err != nil {
+				log.Panic(err)
+			}
 		}
 	}()
 
@@ -116,17 +119,27 @@ func adminLog(update tgbotapi.Update) {
 	log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
 }
 
-func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
-	bot *tgbotapi.BotAPI, StatesConfig map[StateIDType]State) {
-	for {
-		update := <-channel
-		
-		StatesConfig[StateIDType(chat.State)].After(ChatIDType(chat.ChatID), update) // todo: fix int64
+type Chat models.Chat
 
+func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
+	bot *tgbotapi.BotAPI, StatesConfig map[StateIDType]StateActions) {
+
+	var update tgbotapi.Update
+
+	for {
+		after := StatesConfig[StateIDType(chat.State)].After
+		if after != nil {
+			update = <-channel
+			chat.State = string(after(Chat(*chat), update)) // todo: fix int64
+			log.Printf("State after: %v", chat.State)
+		}
 		// todo: switch state here
 
-		StatesConfig[StateIDType(chat.State)].Before(ChatIDType(chat.ChatID)) // todo: fix int64
 
+		before := StatesConfig[StateIDType(chat.State)].Before // todo: fix int64
+		if before != nil {
+			before(Chat(*chat)) // todo: fix int64
+		}
 		chat.Save(db.DB)
 
 	}
