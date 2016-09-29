@@ -14,6 +14,7 @@ const (
 	TelegramTimeout = 60 //msec
 )
 
+type Chat models.Chat
 type ChatChan struct {
 	*models.Chat
 	channel chan tgbotapi.Update
@@ -32,12 +33,11 @@ func DepecheBot() {
 func init() {
 }
 
-func Init(telegramToken string, dbName string, StatesConfig map[StateID]StateActions) {
-	var err error
+func Init(telegramToken string, dbName string, StatesConfig map[StateID]StateActions, adminLog func (tgbotapi.Update, Chat)) {
 
 	db.InitDB(dbName)
 	defer db.DB.Close()
-	err = db.LoadChatsFromDB()
+	err := db.LoadChatsFromDB()
 	if err != nil {
 		log.Panic(err)
 	}
@@ -69,8 +69,6 @@ func Init(telegramToken string, dbName string, StatesConfig map[StateID]StateAct
 
 	for update := range updates {
 
-		adminLog(update)
-		
 		// todo: update.Query and so on...
 		if update.Message == nil {
 			log.Println(update)
@@ -100,11 +98,12 @@ func Init(telegramToken string, dbName string, StatesConfig map[StateID]StateAct
 			}
 		}
 		
+		adminLog(update, Chat(*chat.Chat))
+
 		if chat.channel == nil {
 			chat.channel = make(chan tgbotapi.Update, ChatChanBufSize)
 			go processChat(chats[chatID].Chat, chats[chatID].channel, bot, StatesConfig)
 		}
-
 
 		select {
 		case chat.channel <- update:
@@ -114,12 +113,6 @@ func Init(telegramToken string, dbName string, StatesConfig map[StateID]StateAct
 		}
 	}
 }
-
-func adminLog(update tgbotapi.Update) {
-	log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
-}
-
-type Chat models.Chat
 
 func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
 	bot *tgbotapi.BotAPI, StatesConfig map[StateID]StateActions) {
