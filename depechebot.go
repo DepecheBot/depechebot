@@ -33,7 +33,7 @@ func DepecheBot() {
 func init() {
 }
 
-func Init(telegramToken string, dbName string, StatesConfig map[StateID]StateActions, adminLog func (tgbotapi.Update, Chat)) {
+func Init(telegramToken string, dbName string, StatesConfig map[State]StateActions, adminLog func (tgbotapi.Update, Chat)) {
 
 	db.InitDB(dbName)
 	defer db.DB.Close()
@@ -115,24 +115,24 @@ func Init(telegramToken string, dbName string, StatesConfig map[StateID]StateAct
 }
 
 func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
-	bot *tgbotapi.BotAPI, StatesConfig map[StateID]StateActions) {
+	bot *tgbotapi.BotAPI, StatesConfig map[State]StateActions) {
 
 	var update tgbotapi.Update
 
 	for {
-		while := StatesConfig[StateID(chat.State)].While
+		while := StatesConfig[State(chat.State)].While
 		if while != nil {
 			update = while(channel)
 		}
 
-		after := StatesConfig[StateID(chat.State)].After
+		after := StatesConfig[State(chat.State)].After
 		if after != nil {
 			chat.State = string(after(Chat(*chat), update)) // todo: fix int64
 			log.Printf("State after: %v", chat.State)
 		}
 		// todo: switch state here
 
-		before := StatesConfig[StateID(chat.State)].Before // todo: fix int64
+		before := StatesConfig[State(chat.State)].Before // todo: fix int64
 		if before != nil {
 			before(Chat(*chat)) // todo: fix int64
 		}
