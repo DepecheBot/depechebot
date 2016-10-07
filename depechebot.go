@@ -79,7 +79,7 @@ func processUpdates(updates <-chan tgbotapi.Update,
 	for update := range updates {
 
 		fmt.Fprint(logFile, marshal(update), "\n")
-		fmt.Fprint(os.Stdout, marshal(update), "\n")
+		//fmt.Fprint(os.Stdout, marshal(update), "\n")
 
 		// todo: update.Query and so on...
 		if update.Message == nil {
@@ -141,7 +141,7 @@ func processUpdates(updates <-chan tgbotapi.Update,
 				LastName: update.Message.From.LastName,
 				OpenTime: time.Now().String(),
 				LastTime: time.Now().String(),
-				Groups: "",
+				Groups: "{}",
 				State: marshal(StartState),
 			}
 		}
@@ -192,9 +192,11 @@ func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
 		if after != nil {
 			after(Chat(*chat), update, &state) // todo: fix int64
 			chat.State = marshal(state)
-			log.Printf("State after: %v", state.Name)
+
 			if state.Parameters != "{}" {
-				log.Printf("\twith parameters: %v", state.Parameters)
+				log.Printf("State after: %v with parameters: %v", state.Name, state.Parameters)
+			} else {
+				log.Printf("State after: %v", state.Name)
 			}
 		}
 

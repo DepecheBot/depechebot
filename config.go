@@ -90,7 +90,9 @@ var (
 
 
 func UniversalResponse(chat Chat, update tgbotapi.Update, state *State) {
-	*state = StartState
+	//*state = StartState
+	// todo: fixme!!! Need to initialize UniversalResponse in config
+	*state = NewState("MAIN")
 }
 
 func StateBefore(text Text, keyboard interface{}) func(chat Chat) {
