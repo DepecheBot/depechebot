@@ -2,13 +2,14 @@ package depechebot
 
 import (
 	"log"
+	"encoding/json"
 
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
 )
 
 //type LanguageType string
 type Request struct {
-	text string //map[LanguageType]string
+	Text string //map[LanguageType]string
 	unprescribed bool
 }
 type Responser interface {
@@ -36,19 +37,22 @@ func NewText(s string) Text {
 }
 
 func NewState(s string) State {
-	return State{Name : StateName(s)}
+	return State{
+		Name : StateName(s),
+		Parameters : "{}",
+	}
 }
 
 func NewRequest(s string) Request {
 	return Request{
-		text : s,
+		Text : s,
 		unprescribed : false,
 	}
 }
 
 func NewUnprescribedRequest() Request {
 	return Request{
-		text : "",
+		Text : "",
 		unprescribed : true,
 	}
 }
@@ -56,6 +60,28 @@ func NewUnprescribedRequest() Request {
 func (state State) SkippedBefore() State {
 	state.skipBefore = true
 	return state
+}
+
+func (state State) GetParameter(param string) string {
+	var parameters map[string]string
+
+	check(json.Unmarshal([]byte(state.Parameters), &parameters))
+	return parameters[param]
+}
+
+func (state State) WithParameter(param string, value string) State {
+	newState := state
+	var parameters map[string]string
+
+	err := json.Unmarshal([]byte(newState.Parameters), &parameters)
+	if err != nil {
+		log.Println("parameters: %v", newState.Parameters)
+		log.Panic(err)
+	}
+	parameters[param] = value
+	newState.Parameters = marshal(parameters)
+
+	return newState
 }
 
 var (
@@ -144,7 +170,7 @@ func Keyboard(keyboard [][]Request) tgbotapi.ReplyKeyboardMarkup {
 	for _, row := range keyboard {
 		var Row []tgbotapi.KeyboardButton
 		for _, button := range row {
-			Row = append(Row, tgbotapi.NewKeyboardButton(button.text))
+			Row = append(Row, tgbotapi.NewKeyboardButton(button.Text))
 		}
 		Keyboard = append(Keyboard, Row)
 	}

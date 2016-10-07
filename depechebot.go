@@ -193,6 +193,9 @@ func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
 			after(Chat(*chat), update, &state) // todo: fix int64
 			chat.State = marshal(state)
 			log.Printf("State after: %v", state.Name)
+			if state.Parameters != "{}" {
+				log.Printf("\twith parameters: %v", state.Parameters)
+			}
 		}
 
 		if !state.skipBefore {
