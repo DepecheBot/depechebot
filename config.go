@@ -12,17 +12,23 @@ type Request struct {
 	unprescribed bool
 }
 type Responser interface {
-	Response() func(Chat, tgbotapi.Update) State
+	Response() func(Chat, tgbotapi.Update, *State)
 }
 type Responsers []Responser
 type ReqToRes map[Request]Responser
-type State string
+//type State string
+type StateName string
+type State struct {
+	Name StateName `json:"name"`
+	Parameters string `json:"parameters"`
+	skipBefore bool `json:"-"`
+}
 type Text string
 
 type StateActions struct {
 	Before func(Chat)
 	While func(<-chan tgbotapi.Update) tgbotapi.Update
-	After func(Chat, tgbotapi.Update) State
+	After func(Chat, tgbotapi.Update, *State)
 }
 
 func NewText(s string) Text {
@@ -30,7 +36,7 @@ func NewText(s string) Text {
 }
 
 func NewState(s string) State {
-	return State(s)
+	return State{Name : StateName(s)}
 }
 
 func NewRequest(s string) Request {
@@ -47,12 +53,19 @@ func NewUnprescribedRequest() Request {
 	}
 }
 
+func (state State) SkippedBefore() State {
+	state.skipBefore = true
+	return state
+}
 
-const (
-	StartState = State("START")
-	NillState = State("")
+var (
+	StartState = NewState("START")
 )
 
+
+func UniversalResponse(chat Chat, update tgbotapi.Update, state *State) {
+	*state = StartState
+}
 
 func StateBefore(text Text, keyboard interface{}) func(chat Chat) {
 	return func(chat Chat) {
@@ -82,47 +95,47 @@ func StateWhile() func(<-chan tgbotapi.Update) tgbotapi.Update {
 	}
 }
 
-func StateAfter(responsers ...Responser) func(Chat, tgbotapi.Update) State {
+func StateAfter(responsers ...Responser) func(Chat, tgbotapi.Update, *State) {
 	return Responsers(responsers).Response()
 }
 
-func (responsers Responsers) Response() func(Chat, tgbotapi.Update) State {
-	return func(chat Chat, update tgbotapi.Update) State {
-		var s State
+func (responsers Responsers) Response() func(Chat, tgbotapi.Update, *State) {
+	return func(chat Chat, update tgbotapi.Update, state *State) {
 		for _, responser := range responsers {
-			s = responser.Response()(chat, update)
+			responser.Response()(chat, update, state)
 		}
-		return s
 	}
 }
 
-func (text Text) Response() func(Chat, tgbotapi.Update) State {
-	return func(chat Chat, update tgbotapi.Update) State {
+func (text Text) Response() func(Chat, tgbotapi.Update, *State) {
+	return func(chat Chat, update tgbotapi.Update, state *State) {
 		if text != "" {
 			msg := tgbotapi.NewMessage(int64(chat.ChatID), string(text))
 			SendChan <- msg
 		}
-		return NillState
 	}
 }
 
-func (state State) Response() func(Chat, tgbotapi.Update) State {
-	return func(chat Chat, update tgbotapi.Update) State {
-		return state
+func (newState State) Response() func(Chat, tgbotapi.Update, *State) {
+	return func(chat Chat, update tgbotapi.Update, state *State) {
+		*state = newState
 	}
 }
 
-func (responses ReqToRes) Response() func(Chat, tgbotapi.Update) State {
-	return func(chat Chat, update tgbotapi.Update) State {
+func (responses ReqToRes) Response() func(Chat, tgbotapi.Update, *State) {
+	return func(chat Chat, update tgbotapi.Update, state *State) {
 		response, ok := responses[NewRequest(update.Message.Text)]
 		if !ok {
 			response, ok = responses[NewUnprescribedRequest()]
 			if !ok {
-				log.Panicf("no state %v in states %v\n", update.Message.Text, responses)
+				//response = UniversalResponse
+				UniversalResponse(chat, update, state)
+				return
+				log.Printf("no response %v in responses %v\n", update.Message.Text, responses)
 			}
 		}
 
-		return response.Response()(chat, update)
+		response.Response()(chat, update, state)
 	}
 }
 

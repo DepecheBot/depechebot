@@ -27,6 +27,8 @@ PRAGMA foreign_keys = OFF;
 CREATE TABLE chat (
   primary_id INTEGER NOT NULL PRIMARY KEY,
   chat_id BIGINT UNIQUE NOT NULL,
+  type TEXT NOT NULL,
+  abandoned INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
   user_name TEXT NOT NULL DEFAULT '',
   real_name TEXT NOT NULL,
