@@ -28,7 +28,7 @@ var bot *tgbotapi.BotAPI
 var SendChan chan tgbotapi.Chattable
 
 func DepecheBot() {
-	
+
 }
 
 func init() {
@@ -43,9 +43,7 @@ func Init(telegramToken string, dbName string,
 	db.InitDB(dbName)
 	defer db.DB.Close()
 	err := db.LoadChatsFromDB()
-	if err != nil {
-		log.Panic(err)
-	}
+	check(err)
 
 	for _, chat := range db.Chats {
 		chats[chat.ChatID] = &ChatChan{chat, nil}
@@ -163,6 +161,7 @@ func updateChat(update tgbotapi.Update, chat *models.Chat) {
 	}
 }
 
+// goroutine
 func processChat(chat *models.Chat,
 	channel <-chan tgbotapi.Update,
 	StatesConfig map[StateName]StateActions,
@@ -208,7 +207,7 @@ func processChat(chat *models.Chat,
 	}
 }
 
-
+// goroutine
 func processSendChan() {
 	for msg := range SendChan {
 		_, err := bot.Send(msg)

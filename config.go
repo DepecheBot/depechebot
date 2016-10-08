@@ -20,9 +20,10 @@ type Responsers []Responser
 type ReqToRes map[Request]Responser
 //type State string
 type StateName string
+type jsonMap string
 type State struct {
 	Name StateName `json:"name"`
-	Parameters string `json:"parameters"`
+	Parameters jsonMap `json:"parameters"`
 	skipBefore bool `json:"-"`
 }
 
@@ -85,26 +86,34 @@ func (state State) SkippedBefore() State {
 	return state
 }
 
-func (state State) GetParameter(param string) string {
-	var parameters map[string]string
-
-	check(json.Unmarshal([]byte(state.Parameters), &parameters))
-	return parameters[param]
+func (state State) WithParameter(key, value string) State {
+	newState := state
+	(&newState.Parameters).Set(key, value)
+	return newState
 }
 
-func (state State) WithParameter(param string, value string) State {
-	newState := state
-	var parameters map[string]string
+func (jm jsonMap) Get(key string) string {
+	var m map[string]string
 
-	err := json.Unmarshal([]byte(newState.Parameters), &parameters)
+	check(json.Unmarshal([]byte(jm), &m))
+	return m[key]
+}
+
+func (jm *jsonMap) Set(key, value string) {
+	var m map[string]string
+
+	err := json.Unmarshal([]byte(*jm), &m)
 	if err != nil {
-		log.Println("parameters: %v", newState.Parameters)
-		log.Panic(err)
+		log.Panicf("jm: %v, err: %v\n", jm, err)
 	}
-	parameters[param] = value
-	newState.Parameters = marshal(parameters)
+	m[key] = value
+	*jm = jsonMap(marshal(m))
+}
 
-	return newState
+func (jm jsonMap) With(key, value string) jsonMap {
+	newJM := jm
+	(&newJM).Set(key, value)
+	return newJM
 }
 
 var (
