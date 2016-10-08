@@ -15,6 +15,7 @@ type Request struct {
 type Responser interface {
 	Response() func(Chat, tgbotapi.Update, *State)
 }
+type ResponseFunc func() func(Chat, tgbotapi.Update, *State)
 type Responsers []Responser
 type ReqToRes map[Request]Responser
 //type State string
@@ -25,6 +26,9 @@ type State struct {
 	skipBefore bool `json:"-"`
 }
 type Text string
+type Photo struct {
+	fileID string
+}
 
 type StateActions struct {
 	Before func(Chat)
@@ -34,6 +38,10 @@ type StateActions struct {
 
 func NewText(s string) Text {
 	return Text(s)
+}
+
+func NewPhoto(fileID string) Photo {
+	return Photo{fileID : fileID}
 }
 
 func NewState(s string) State {
@@ -144,6 +152,13 @@ func (text Text) Response() func(Chat, tgbotapi.Update, *State) {
 	}
 }
 
+func (photo Photo) Response() func(Chat, tgbotapi.Update, *State) {
+	return func(chat Chat, update tgbotapi.Update, state *State) {
+		msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.fileID)
+		SendChan <- msg
+	}
+}
+
 func (newState State) Response() func(Chat, tgbotapi.Update, *State) {
 	return func(chat Chat, update tgbotapi.Update, state *State) {
 		*state = newState
@@ -166,6 +181,12 @@ func (responses ReqToRes) Response() func(Chat, tgbotapi.Update, *State) {
 		response.Response()(chat, update, state)
 	}
 }
+
+func (responseFunc ResponseFunc) Response() func(Chat, tgbotapi.Update, *State) {
+	return responseFunc()
+}
+
+
 
 func Keyboard(keyboard [][]Request) tgbotapi.ReplyKeyboardMarkup {
 	var Keyboard [][]tgbotapi.KeyboardButton
