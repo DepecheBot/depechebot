@@ -25,9 +25,15 @@ type State struct {
 	Parameters string `json:"parameters"`
 	skipBefore bool `json:"-"`
 }
-type Text string
+
+type Text struct {
+	Text string
+	ParseMode string
+}
+
 type Photo struct {
-	fileID string
+	Caption string
+	FileID string
 }
 
 type StateActions struct {
@@ -37,11 +43,20 @@ type StateActions struct {
 }
 
 func NewText(s string) Text {
-	return Text(s)
+	return Text{Text : s}
+}
+func NewTextWithMarkdown(s string) Text {
+	return Text{Text : s, ParseMode : "Markdown"}
+}
+func NewPhoto(fileID string) Photo {
+	return Photo{FileID : fileID}
 }
 
-func NewPhoto(fileID string) Photo {
-	return Photo{fileID : fileID}
+func NewPhotoWithCaption(fileID string, caption string) Photo {
+	return Photo{
+		FileID : fileID,
+		Caption : caption,
+	}
 }
 
 func NewState(s string) State {
@@ -105,7 +120,8 @@ func UniversalResponse(chat Chat, update tgbotapi.Update, state *State) {
 
 func StateBefore(text Text, keyboard interface{}) func(chat Chat) {
 	return func(chat Chat) {
-		msg := tgbotapi.NewMessage(int64(chat.ChatID), string(text))
+		msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
+		msg.ParseMode = text.ParseMode
 		switch keyboard := keyboard.(type) {
 		default:
 			msg.ReplyMarkup = keyboard
@@ -145,8 +161,9 @@ func (responsers Responsers) Response() func(Chat, tgbotapi.Update, *State) {
 
 func (text Text) Response() func(Chat, tgbotapi.Update, *State) {
 	return func(chat Chat, update tgbotapi.Update, state *State) {
-		if text != "" {
-			msg := tgbotapi.NewMessage(int64(chat.ChatID), string(text))
+		if text.Text != "" {
+			msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
+			msg.ParseMode = text.ParseMode
 			SendChan <- msg
 		}
 	}
@@ -154,7 +171,10 @@ func (text Text) Response() func(Chat, tgbotapi.Update, *State) {
 
 func (photo Photo) Response() func(Chat, tgbotapi.Update, *State) {
 	return func(chat Chat, update tgbotapi.Update, state *State) {
-		msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.fileID)
+		msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.FileID)
+		if photo.Caption != "" {
+			msg.Caption = photo.Caption
+		}
 		SendChan <- msg
 	}
 }
