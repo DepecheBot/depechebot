@@ -75,7 +75,6 @@ func processUpdates(updates <-chan tgbotapi.Update,
 	for update := range updates {
 
 		commonLog(update)
-		//fmt.Fprint(logFile, marshal(update), "\n")
 
 		// todo: update.Query and so on...
 		if update.Message == nil {
@@ -83,53 +82,15 @@ func processUpdates(updates <-chan tgbotapi.Update,
 		}
 
 		chatID := int(update.Message.Chat.ID) // todo: fix int() for 32-bit
-
-		var abandoned = false
-		// checked either bot is kicked itself or he is alone now
-		if update.Message.LeftChatMember != nil {
-			if update.Message.LeftChatMember.ID == bot.Self.ID {
-				abandoned = true
-			} else {
-				count, err := bot.GetChatMembersCount(update.Message.Chat.ChatConfig())
-				check(err)
-				if count == 1 {
-					abandoned = true
-					bot.LeaveChat(update.Message.Chat.ChatConfig())
-				}
-			}
-		}
-		if update.Message.NewChatMember != nil &&
-			update.Message.NewChatMember.ID == bot.Self.ID {
-			abandoned = false
-		}
-		if update.Message.MigrateToChatID != 0 {
-			// todo: need to do more here to migrate
-			abandoned = true
-		}
-		if update.Message.MigrateFromChatID != 0 {
-			// todo: need to do more here to migrate
-		}
-
-
 		chat, ok := chats[chatID]
-		if ok {
-			chat.Abandoned = bool2int(abandoned)
-			chat.UserName = update.Message.From.UserName
-			chat.FirstName = update.Message.From.FirstName
-			chat.LastName = update.Message.From.LastName
-			chat.LastTime = time.Now().String()
 
-			// todo: is it correct?
-			if abandoned {
-				chat.State = marshal(StartState)
-			}
-		} else {
+		if !ok {
 			chat = &ChatChan{}
 			chats[chatID] = chat
 
 			chat.Chat = &models.Chat{
 				ChatID: chatID,
-				Abandoned: bool2int(abandoned),
+				Abandoned: bool2int(false),
 				Type : update.Message.Chat.Type,
 				UserID: update.Message.From.ID,
 				UserName: update.Message.From.UserName,
@@ -142,14 +103,12 @@ func processUpdates(updates <-chan tgbotapi.Update,
 			}
 		}
 
-		chatLog(update, Chat(*chat.Chat))
-
 		if chat.channel == nil {
 			chat.channel = make(chan tgbotapi.Update, ChatChanBufSize)
 			if chat.Type == "private" {
-				go processChat(chats[chatID].Chat, chats[chatID].channel, StatesConfigPrivate)
+				go processChat(chats[chatID].Chat, chats[chatID].channel, StatesConfigPrivate, chatLog)
 			} else {
-				go processChat(chats[chatID].Chat, chats[chatID].channel, StatesConfigGroup)
+				go processChat(chats[chatID].Chat, chats[chatID].channel, StatesConfigGroup, chatLog)
 			}
 		}
 
@@ -163,8 +122,51 @@ func processUpdates(updates <-chan tgbotapi.Update,
 
 }
 
-func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
-	StatesConfig map[StateName]StateActions) {
+func updateChat(update tgbotapi.Update, chat *models.Chat) {
+
+	var abandoned = false
+	// checked either bot is kicked itself or he is alone now
+	if update.Message.LeftChatMember != nil {
+		if update.Message.LeftChatMember.ID == bot.Self.ID {
+			abandoned = true
+		} else {
+			count, err := bot.GetChatMembersCount(update.Message.Chat.ChatConfig())
+			check(err)
+			if count == 1 {
+				abandoned = true
+				bot.LeaveChat(update.Message.Chat.ChatConfig())
+			}
+		}
+	}
+	if update.Message.NewChatMember != nil &&
+		update.Message.NewChatMember.ID == bot.Self.ID {
+		abandoned = false
+	}
+	if update.Message.MigrateToChatID != 0 {
+		// todo: need to do more here to migrate
+		abandoned = true
+	}
+	if update.Message.MigrateFromChatID != 0 {
+		// todo: need to do more here to migrate
+	}
+
+
+	chat.Abandoned = bool2int(abandoned)
+	chat.UserName = update.Message.From.UserName
+	chat.FirstName = update.Message.From.FirstName
+	chat.LastName = update.Message.From.LastName
+	chat.LastTime = time.Now().String()
+
+	// todo: is it correct?
+	if abandoned {
+		chat.State = marshal(StartState)
+	}
+}
+
+func processChat(chat *models.Chat,
+	channel <-chan tgbotapi.Update,
+	StatesConfig map[StateName]StateActions,
+	chatLog func(tgbotapi.Update, Chat)) {
 
 	var update tgbotapi.Update
 	var state State
@@ -180,6 +182,8 @@ func processChat(chat *models.Chat, channel <-chan tgbotapi.Update,
 		while := StatesConfig[state.Name].While
 		if while != nil {
 			update = while(channel)
+			updateChat(update, chat)
+			chatLog(update, Chat(*chat))
 		}
 
 		after := StatesConfig[state.Name].After
