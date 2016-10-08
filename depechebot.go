@@ -4,8 +4,6 @@ import (
 	"log"
 	"time"
 	"encoding/json"
-	"os"
-	"fmt"
 
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
 	db "github.com/DepecheBot/depechebot/database"
@@ -39,7 +37,8 @@ func init() {
 func Init(telegramToken string, dbName string,
 	StatesConfigPrivate map[StateName]StateActions,
 	StatesConfigGroup map[StateName]StateActions,
-	adminLog func (tgbotapi.Update, Chat)) {
+	commonLog func(tgbotapi.Update),
+	chatLog func(tgbotapi.Update, Chat)) {
 
 	db.InitDB(dbName)
 	defer db.DB.Close()
@@ -52,9 +51,6 @@ func Init(telegramToken string, dbName string,
 		chats[chat.ChatID] = &ChatChan{chat, nil}
 	}
 
-	logFile, err := os.OpenFile("log", os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
-	check(err)
-	defer logFile.Close()
 
 	bot, err = tgbotapi.NewBotAPI(telegramToken)
 	check(err)
@@ -67,19 +63,19 @@ func Init(telegramToken string, dbName string,
 	u.Timeout = TelegramTimeout
 	updates, err := bot.GetUpdatesChan(u)
 
-	processUpdates(updates, StatesConfigPrivate, StatesConfigGroup, adminLog, logFile)
+	processUpdates(updates, StatesConfigPrivate, StatesConfigGroup, commonLog, chatLog)
 }
 
 func processUpdates(updates <-chan tgbotapi.Update,
 	StatesConfigPrivate map[StateName]StateActions,
 	StatesConfigGroup map[StateName]StateActions,
-	adminLog func (tgbotapi.Update, Chat),
-	logFile *os.File) {
+	commonLog func(tgbotapi.Update),
+	chatLog func(tgbotapi.Update, Chat)) {
 
 	for update := range updates {
 
-		fmt.Fprint(logFile, marshal(update), "\n")
-		//fmt.Fprint(os.Stdout, marshal(update), "\n")
+		commonLog(update)
+		//fmt.Fprint(logFile, marshal(update), "\n")
 
 		// todo: update.Query and so on...
 		if update.Message == nil {
@@ -146,7 +142,7 @@ func processUpdates(updates <-chan tgbotapi.Update,
 			}
 		}
 
-		adminLog(update, Chat(*chat.Chat))
+		chatLog(update, Chat(*chat.Chat))
 
 		if chat.channel == nil {
 			chat.channel = make(chan tgbotapi.Update, ChatChanBufSize)
@@ -156,8 +152,6 @@ func processUpdates(updates <-chan tgbotapi.Update,
 				go processChat(chats[chatID].Chat, chats[chatID].channel, StatesConfigGroup)
 			}
 		}
-
-		//chat.Save(db.DB) // no need to save here
 
 		select {
 		case chat.channel <- update:
@@ -218,30 +212,4 @@ func processSendChan() {
 			log.Panicf("Failed to send (%v): error \"%v\"", marshal(msg), err)
 		}
 	}
-}
-
-
-/// todo: move these funcs to utils
-
-func check(err error) {
-	if err != nil {
-		log.Panic(err)
-	}
-}
-
-func bool2int(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
-
-func int2bool(i int) bool {
-	return i != 0
-}
-
-func marshal(data interface{}) string {
-	out, err := json.Marshal(data)
-	check(err)
-	return string(out)
 }
