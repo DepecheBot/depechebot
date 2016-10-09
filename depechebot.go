@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	ChatChanBufSize int = 100
+	ChatChanBufSize int = 1000
 	TelegramTimeout = 60 //msec
 )
 
@@ -212,10 +212,17 @@ func processChat(chat *models.Chat,
 
 // goroutine
 func processSendChan() {
+	const (
+		commonDelay = time.Second / 30
+	)
+
 	for msg := range SendChan {
 		_, err := bot.Send(msg)
 		if err != nil {
-			log.Panicf("Failed to send (%v): error \"%v\"", marshal(msg), err)
+			//log.Panicf("Failed to send (%v): error \"%v\"\n", marshal(msg), err)
+			log.Printf("Failed to send (%v): error \"%v\"\n", marshal(msg), err)
 		}
+
+		time.Sleep(commonDelay)
 	}
 }
