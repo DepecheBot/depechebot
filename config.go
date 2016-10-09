@@ -12,10 +12,10 @@ type Request struct {
 	Text string //map[LanguageType]string
 	unprescribed bool
 }
+type ResponseFunc func(Chat, tgbotapi.Update, *State, *Groups)
 type Responser interface {
-	Response() func(Chat, tgbotapi.Update, *State)
+	Response(Chat, tgbotapi.Update, *State, *Groups)
 }
-type ResponseFunc func() func(Chat, tgbotapi.Update, *State)
 type Responsers []Responser
 type ReqToRes map[Request]Responser
 //type State string
@@ -26,7 +26,9 @@ type State struct {
 	Parameters jsonMap `json:"parameters"`
 	skipBefore bool `json:"-"`
 }
-
+type Groups struct {
+	Parameters jsonMap
+}
 type Text struct {
 	Text string
 	ParseMode string
@@ -40,7 +42,7 @@ type Photo struct {
 type StateActions struct {
 	Before func(Chat)
 	While func(<-chan tgbotapi.Update) tgbotapi.Update
-	After func(Chat, tgbotapi.Update, *State)
+	After func(Chat, tgbotapi.Update, *State, *Groups)
 }
 
 func NewText(s string) Text {
@@ -121,7 +123,7 @@ var (
 )
 
 
-func UniversalResponse(chat Chat, update tgbotapi.Update, state *State) {
+func UniversalResponse(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
 	//*state = StartState
 	// todo: fixme!!! Need to initialize UniversalResponse in config
 	*state = NewState("MAIN")
@@ -156,63 +158,54 @@ func StateWhile() func(<-chan tgbotapi.Update) tgbotapi.Update {
 	}
 }
 
-func StateAfter(responsers ...Responser) func(Chat, tgbotapi.Update, *State) {
-	return Responsers(responsers).Response()
+func StateAfter(responsers ...Responser) func(Chat, tgbotapi.Update, *State, *Groups) {
+	return Responsers(responsers).Response
 }
 
-func (responsers Responsers) Response() func(Chat, tgbotapi.Update, *State) {
-	return func(chat Chat, update tgbotapi.Update, state *State) {
-		for _, responser := range responsers {
-			responser.Response()(chat, update, state)
-		}
+func (responsers Responsers) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+	for _, responser := range responsers {
+		responser.Response(chat, update, state, groups)
 	}
 }
 
-func (text Text) Response() func(Chat, tgbotapi.Update, *State) {
-	return func(chat Chat, update tgbotapi.Update, state *State) {
-		if text.Text != "" {
-			msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
-			msg.ParseMode = text.ParseMode
-			SendChan <- msg
-		}
-	}
-}
-
-func (photo Photo) Response() func(Chat, tgbotapi.Update, *State) {
-	return func(chat Chat, update tgbotapi.Update, state *State) {
-		msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.FileID)
-		if photo.Caption != "" {
-			msg.Caption = photo.Caption
-		}
+func (text Text) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+	if text.Text != "" {
+		msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
+		msg.ParseMode = text.ParseMode
 		SendChan <- msg
 	}
 }
 
-func (newState State) Response() func(Chat, tgbotapi.Update, *State) {
-	return func(chat Chat, update tgbotapi.Update, state *State) {
-		*state = newState
+
+func (photo Photo) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+	msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.FileID)
+	if photo.Caption != "" {
+		msg.Caption = photo.Caption
 	}
+	SendChan <- msg
 }
 
-func (responses ReqToRes) Response() func(Chat, tgbotapi.Update, *State) {
-	return func(chat Chat, update tgbotapi.Update, state *State) {
-		response, ok := responses[NewRequest(update.Message.Text)]
+func (newState State) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+	*state = newState
+}
+
+func (responses ReqToRes) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+	response, ok := responses[NewRequest(update.Message.Text)]
+	if !ok {
+		response, ok = responses[NewUnprescribedRequest()]
 		if !ok {
-			response, ok = responses[NewUnprescribedRequest()]
-			if !ok {
-				//response = UniversalResponse
-				UniversalResponse(chat, update, state)
-				return
-				log.Printf("no response %v in responses %v\n", update.Message.Text, responses)
-			}
+			//response = UniversalResponse
+			UniversalResponse(chat, update, state, groups)
+			log.Printf("no response %v in responses %v\n", update.Message.Text, responses)
+			return
 		}
-
-		response.Response()(chat, update, state)
 	}
+
+	response.Response(chat, update, state, groups)
 }
 
-func (responseFunc ResponseFunc) Response() func(Chat, tgbotapi.Update, *State) {
-	return responseFunc()
+func (responseFunc ResponseFunc) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+	responseFunc(chat, update, state, groups)
 }
 
 

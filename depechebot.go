@@ -169,10 +169,12 @@ func processChat(chat *models.Chat,
 
 	var update tgbotapi.Update
 	var state State
+	var groups Groups
 
 	for {
 		err := json.Unmarshal([]byte(chat.State), &state)
 		check(err)
+		groups.Parameters = jsonMap(chat.Groups)
 
 		if _, ok := StatesConfig[state.Name]; !ok {
 			log.Panicf("No such state: %v", state.Name)
@@ -187,8 +189,9 @@ func processChat(chat *models.Chat,
 
 		after := StatesConfig[state.Name].After
 		if after != nil {
-			after(Chat(*chat), update, &state) // todo: fix int64
+			after(Chat(*chat), update, &state, &groups) // todo: fix int64
 			chat.State = marshal(state)
+			chat.Groups = string(groups.Parameters)
 
 			if state.Parameters != "{}" {
 				log.Printf("State after: %v with parameters: %v", state.Name, state.Parameters)
