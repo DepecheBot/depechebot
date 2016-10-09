@@ -45,10 +45,12 @@ func Init(telegramToken string, dbName string,
 	err := db.LoadChatsFromDB()
 	check(err)
 
-	for _, chat := range db.Chats {
+	var i int
+	var chat *models.Chat
+	for i, chat = range db.Chats {
 		chats[chat.ChatID] = &ChatChan{chat, nil}
 	}
-
+	log.Printf("Loaded %v chats from DB file %v\n", i + 1, dbName)
 
 	bot, err = tgbotapi.NewBotAPI(telegramToken)
 	check(err)
@@ -194,9 +196,9 @@ func processChat(chat *models.Chat,
 			chat.Groups = string(groups.Parameters)
 
 			if state.Parameters != "{}" {
-				log.Printf("State after: %v with parameters: %v", state.Name, state.Parameters)
+				log.Printf("    State after: %v with parameters: %v", state.Name, state.Parameters)
 			} else {
-				log.Printf("State after: %v", state.Name)
+				log.Printf("    State after: %v", state.Name)
 			}
 		}
 
