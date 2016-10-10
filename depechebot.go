@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	ChatChanBufSize int = 1000
-	TelegramTimeout = 60 //msec
+	chatChanBufSize = 100
+	sendChanBufSize = 1000
+	sendBroadChanBufSize = 100
+	telegramTimeout = 60 //msec
 )
 
 type Chat models.Chat
@@ -26,6 +28,12 @@ type ChatIDType int64
 var chats = map[int]*ChatChan {}
 var bot *tgbotapi.BotAPI
 var SendChan chan tgbotapi.Chattable
+type BroadMsg struct {
+	//Msg tgbotapi.Chattable
+	Msg tgbotapi.MessageConfig
+	List []ChatIDType
+}
+var SendBroadChan chan BroadMsg
 
 func DepecheBot() {
 
@@ -56,11 +64,14 @@ func Init(telegramToken string, dbName string,
 	check(err)
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 	
-	SendChan = make(chan tgbotapi.Chattable, 100)
+	SendChan = make(chan tgbotapi.Chattable, sendChanBufSize)
 	go processSendChan()
 
+	SendBroadChan = make(chan BroadMsg, sendBroadChanBufSize)
+	go processBroadSendChan()
+
 	u := tgbotapi.NewUpdate(0)
-	u.Timeout = TelegramTimeout
+	u.Timeout = telegramTimeout
 	updates, err := bot.GetUpdatesChan(u)
 
 	processUpdates(updates, StatesConfigPrivate, StatesConfigGroup, commonLog, chatLog)
@@ -104,7 +115,7 @@ func processUpdates(updates <-chan tgbotapi.Update,
 		}
 
 		if chat.channel == nil {
-			chat.channel = make(chan tgbotapi.Update, ChatChanBufSize)
+			chat.channel = make(chan tgbotapi.Update, chatChanBufSize)
 			if chat.Type == "private" {
 				go processChat(chats[chatID].Chat, chats[chatID].channel, StatesConfigPrivate, chatLog)
 			} else {
@@ -226,5 +237,20 @@ func processSendChan() {
 		}
 
 		time.Sleep(commonDelay)
+	}
+}
+
+// goroutine
+func processBroadSendChan() {
+	const (
+		commonDelay = time.Second / 30
+	)
+
+	for broadMsg := range SendBroadChan {
+		for _, chatID := range broadMsg.List {
+			broadMsg.Msg.ChatID = int64(chatID)
+			SendChan <- broadMsg.Msg
+			time.Sleep(commonDelay)
+		}
 	}
 }

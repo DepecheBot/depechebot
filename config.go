@@ -49,7 +49,7 @@ func NewText(s string) Text {
 	return Text{Text : s}
 }
 func NewTextWithMarkdown(s string) Text {
-	return Text{Text : s, ParseMode : "Markdown"}
+	return Text{Text : s, ParseMode : tgbotapi.ModeMarkdown}
 }
 func NewPhoto(fileID string) Photo {
 	return Photo{FileID : fileID}
