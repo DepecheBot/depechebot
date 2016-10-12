@@ -69,6 +69,12 @@ func NewState(s string) State {
 	}
 }
 
+func NewGroups(key, value string) Groups {
+	groups := Groups{Parameters : jsonMap("{}")}
+	groups.Parameters.Set(key, value)
+	return groups
+}
+
 func NewRequest(s string) Request {
 	return Request{
 		Text : s,
@@ -92,6 +98,16 @@ func (state State) WithParameter(key, value string) State {
 	newState := state
 	(&newState.Parameters).Set(key, value)
 	return newState
+}
+
+func (groups *Groups) AddGroups(newGroups Groups) {
+	var m1 map[string]string
+
+	json.Unmarshal([]byte(newGroups.Parameters), &m1)
+	//json.Unmarshal([]byte(groups), &m2)
+	for key, value := range m1 {
+		groups.Parameters.Set(key, value)
+	}
 }
 
 func (jm jsonMap) Get(key string) string {
@@ -187,6 +203,10 @@ func (photo Photo) Response(chat Chat, update tgbotapi.Update, state *State, gro
 
 func (newState State) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
 	*state = newState
+}
+
+func (newGroups Groups) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+	groups.AddGroups(newGroups)
 }
 
 func (responses ReqToRes) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
