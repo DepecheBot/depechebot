@@ -3,6 +3,7 @@ package depechebot
 import (
 	"log"
 	"encoding/json"
+	"fmt"
 
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
 )
@@ -33,15 +34,13 @@ type Text struct {
 	Text string
 	ParseMode string
 }
-
 type Photo struct {
 	Caption string
 	FileID string
 }
-
 type StateActions struct {
 	Before func(Chat)
-	While func(<-chan tgbotapi.Update) tgbotapi.Update
+	While func(<-chan Signal) Signal
 	After func(Chat, tgbotapi.Update, *State, *Groups)
 }
 
@@ -98,6 +97,14 @@ func (state State) WithParameter(key, value string) State {
 	newState := state
 	(&newState.Parameters).Set(key, value)
 	return newState
+}
+
+func (state State) String() string {
+	if state.Parameters != "{}" {
+		return fmt.Sprintf("%v with parameters: %v", state.Name, state.Parameters)
+	} else {
+		return fmt.Sprintf("%v", state.Name)
+	}
 }
 
 func (groups *Groups) AddGroups(newGroups Groups) {
@@ -164,13 +171,13 @@ func StateBefore(text Text, keyboard interface{}) func(chat Chat) {
 			}
 		}
 
-		SendChan <- msg
+		SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 	}
 }
 
-func StateWhile() func(<-chan tgbotapi.Update) tgbotapi.Update {
-	return func(channel <-chan tgbotapi.Update) tgbotapi.Update {
-		return <-channel
+func StateWhile() func(<-chan Signal) Signal {
+	return func(signalChan <-chan Signal) Signal {
+		return <-signalChan
 	}
 }
 
@@ -188,7 +195,7 @@ func (text Text) Response(chat Chat, update tgbotapi.Update, state *State, group
 	if text.Text != "" {
 		msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
 		msg.ParseMode = text.ParseMode
-		SendChan <- msg
+		SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 	}
 }
 
@@ -198,7 +205,7 @@ func (photo Photo) Response(chat Chat, update tgbotapi.Update, state *State, gro
 	if photo.Caption != "" {
 		msg.Caption = photo.Caption
 	}
-	SendChan <- msg
+	SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 }
 
 func (newState State) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
