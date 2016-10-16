@@ -57,28 +57,32 @@ func init() {
 }
 
 func Init(telegramToken string, dbName string) {
+	var err error
+
+	bot, err = tgbotapi.NewBotAPI(telegramToken)
+	check(err)
+	log.Printf("Authorized on account %s", bot.Self.UserName)
 
 	db.InitDB(dbName)
 	defer db.DB.Close()
-	err := db.LoadChatsFromDB()
+	err = db.LoadChatsFromDB()
 	check(err)
 
 	var i int
 	var chat *models.Chat
 	for i, chat = range db.Chats {
 		chats[chat.ChatID] = &ChatChan{chat, make(chan Signal, chatChanBufSize)}
-		go processChat(chats[chat.ChatID].Chat, chats[chat.ChatID].signalChan)
 	}
 	log.Printf("Loaded %v chats from DB file %v\n", i + 1, dbName)
 
-	bot, err = tgbotapi.NewBotAPI(telegramToken)
-	check(err)
-	log.Printf("Authorized on account %s", bot.Self.UserName)
-	
 	SendChan = make(chan ChatSignal, sendChanBufSize)
-	go processSendChan()
-
 	SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
+
+	for _, chat = range db.Chats {
+		go processChat(chats[chat.ChatID].Chat, chats[chat.ChatID].signalChan)
+	}
+
+	go processSendChan()
 	go processSendBroadChan()
 
 	u := tgbotapi.NewUpdate(0)
