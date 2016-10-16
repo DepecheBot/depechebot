@@ -3,7 +3,7 @@ package database
 import (
 	"database/sql"
 
-	"github.com/DepecheBot/depechebot/database/models"
+	"github.com/depechebot/depechebot/database/models"
 )
 
 // type State struct {

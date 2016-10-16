@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
-	db "github.com/DepecheBot/depechebot/database"
-	models "github.com/DepecheBot/depechebot/database/models"
+	db "github.com/depechebot/depechebot/database"
+	models "github.com/depechebot/depechebot/database/models"
 )
 
 const (
