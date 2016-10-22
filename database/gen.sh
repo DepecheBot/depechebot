@@ -41,7 +41,17 @@ CREATE TABLE chat (
 );
 ENDSQL
 
-$XOBIN $DB -o $SRC/models $EXTRA
+$XOBIN $DB -o ./models $EXTRA
+
+$XOBIN $DB -N -M -B -T ChatResult -o ./models << 'ENDSQL'
+SELECT
+*
+FROM chat
+WHERE
+groups like "%" || %%param string%% || "%"
+ENDSQL
+
+go build ./models
 
 #pushd $SRC &> /dev/null
 #
