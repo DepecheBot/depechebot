@@ -1,8 +1,6 @@
-#!/bin/bash
+#!/bin/bash -eux
 
 DBNAME=chats.sqlite3
-
-EXTRA=$1
 
 SRC=$(realpath $(cd -P "$( dirname "${BASH_SOURCE[0]}" )" && pwd ))
 
@@ -41,7 +39,7 @@ CREATE TABLE chat (
 );
 ENDSQL
 
-$XOBIN $DB -o ./models $EXTRA
+$XOBIN $DB -o ./models
 
 $XOBIN $DB -N -M -B -T ChatResult -o ./models << 'ENDSQL'
 SELECT
@@ -56,6 +54,6 @@ go build ./models
 #pushd $SRC &> /dev/null
 #
 #go build
-#./sqlite3 $EXTRA
+#./sqlite3
 #
 #popd &> /dev/null
