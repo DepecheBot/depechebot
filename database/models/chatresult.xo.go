@@ -11,13 +11,12 @@ type ChatResult struct {
 	Abandoned int    // abandoned
 	UserID    int    // user_id
 	UserName  string // user_name
-	RealName  string // real_name
 	FirstName string // first_name
 	LastName  string // last_name
 	OpenTime  string // open_time
 	LastTime  string // last_time
-	Groups    string // groups
 	State     string // state
+	Params    string // params
 }
 
 // ChatResultsByParam runs a custom query, returning results as ChatResult.
@@ -29,7 +28,7 @@ func ChatResultsByParam(db XODB, param string) ([]*ChatResult, error) {
 		`* ` +
 		`FROM chat ` +
 		`WHERE ` +
-		`groups like "%" || ? || "%"`
+		`params like "%" || ? || "%"`
 
 	// run query
 	XOLog(sqlstr, param)
@@ -45,7 +44,7 @@ func ChatResultsByParam(db XODB, param string) ([]*ChatResult, error) {
 		cr := ChatResult{}
 
 		// scan
-		err = q.Scan(&cr.PrimaryID, &cr.ChatID, &cr.Type, &cr.Abandoned, &cr.UserID, &cr.UserName, &cr.RealName, &cr.FirstName, &cr.LastName, &cr.OpenTime, &cr.LastTime, &cr.Groups, &cr.State)
+		err = q.Scan(&cr.PrimaryID, &cr.ChatID, &cr.Type, &cr.Abandoned, &cr.UserID, &cr.UserName, &cr.FirstName, &cr.LastName, &cr.OpenTime, &cr.LastTime, &cr.State, &cr.Params)
 		if err != nil {
 			return nil, err
 		}

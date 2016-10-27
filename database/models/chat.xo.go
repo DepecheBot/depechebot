@@ -13,13 +13,12 @@ type Chat struct {
 	Abandoned int    `json:"abandoned"`  // abandoned
 	UserID    int    `json:"user_id"`    // user_id
 	UserName  string `json:"user_name"`  // user_name
-	RealName  string `json:"real_name"`  // real_name
 	FirstName string `json:"first_name"` // first_name
 	LastName  string `json:"last_name"`  // last_name
 	OpenTime  string `json:"open_time"`  // open_time
 	LastTime  string `json:"last_time"`  // last_time
-	Groups    string `json:"groups"`     // groups
 	State     string `json:"state"`      // state
+	Params    string `json:"params"`     // params
 
 	// xo fields
 	_exists, _deleted bool
@@ -46,14 +45,14 @@ func (c *Chat) Insert(db XODB) error {
 
 	// sql query
 	const sqlstr = `INSERT INTO chat (` +
-		`chat_id, type, abandoned, user_id, user_name, real_name, first_name, last_name, open_time, last_time, groups, state` +
+		`chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params` +
 		`) VALUES (` +
-		`?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?` +
+		`?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?` +
 		`)`
 
 	// run query
-	XOLog(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.RealName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.Groups, c.State)
-	res, err := db.Exec(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.RealName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.Groups, c.State)
+	XOLog(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.State, c.Params)
+	res, err := db.Exec(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.State, c.Params)
 	if err != nil {
 		return err
 	}
@@ -87,12 +86,12 @@ func (c *Chat) Update(db XODB) error {
 
 	// sql query
 	const sqlstr = `UPDATE chat SET ` +
-		`chat_id = ?, type = ?, abandoned = ?, user_id = ?, user_name = ?, real_name = ?, first_name = ?, last_name = ?, open_time = ?, last_time = ?, groups = ?, state = ?` +
+		`chat_id = ?, type = ?, abandoned = ?, user_id = ?, user_name = ?, first_name = ?, last_name = ?, open_time = ?, last_time = ?, state = ?, params = ?` +
 		` WHERE primary_id = ?`
 
 	// run query
-	XOLog(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.RealName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.Groups, c.State, c.PrimaryID)
-	_, err = db.Exec(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.RealName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.Groups, c.State, c.PrimaryID)
+	XOLog(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.State, c.Params, c.PrimaryID)
+	_, err = db.Exec(sqlstr, c.ChatID, c.Type, c.Abandoned, c.UserID, c.UserName, c.FirstName, c.LastName, c.OpenTime, c.LastTime, c.State, c.Params, c.PrimaryID)
 	return err
 }
 
@@ -143,7 +142,7 @@ func ChatByPrimaryID(db XODB, primaryID int) (*Chat, error) {
 
 	// sql query
 	const sqlstr = `SELECT ` +
-		`primary_id, chat_id, type, abandoned, user_id, user_name, real_name, first_name, last_name, open_time, last_time, groups, state ` +
+		`primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params ` +
 		`FROM chat ` +
 		`WHERE primary_id = ?`
 
@@ -153,7 +152,7 @@ func ChatByPrimaryID(db XODB, primaryID int) (*Chat, error) {
 		_exists: true,
 	}
 
-	err = db.QueryRow(sqlstr, primaryID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName, &c.RealName, &c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &c.Groups, &c.State)
+	err = db.QueryRow(sqlstr, primaryID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName, &c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &c.State, &c.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +168,7 @@ func ChatByChatID(db XODB, chatID int) (*Chat, error) {
 
 	// sql query
 	const sqlstr = `SELECT ` +
-		`primary_id, chat_id, type, abandoned, user_id, user_name, real_name, first_name, last_name, open_time, last_time, groups, state ` +
+		`primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params ` +
 		`FROM chat ` +
 		`WHERE chat_id = ?`
 
@@ -179,7 +178,7 @@ func ChatByChatID(db XODB, chatID int) (*Chat, error) {
 		_exists: true,
 	}
 
-	err = db.QueryRow(sqlstr, chatID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName, &c.RealName, &c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &c.Groups, &c.State)
+	err = db.QueryRow(sqlstr, chatID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName, &c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &c.State, &c.Params)
 	if err != nil {
 		return nil, err
 	}

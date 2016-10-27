@@ -29,13 +29,12 @@ CREATE TABLE chat (
   abandoned INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
   user_name TEXT NOT NULL DEFAULT '',
-  real_name TEXT NOT NULL,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   open_time timestamptz NOT NULL,
   last_time DATETIME NOT NULL,
-  groups TEXT NOT NULL,
-  state TEXT NOT NULL
+  state TEXT NOT NULL,
+  params TEXT NOT NULL
 );
 ENDSQL
 
@@ -46,7 +45,7 @@ SELECT
 *
 FROM chat
 WHERE
-groups like "%" || %%param string%% || "%"
+params like "%" || %%param string%% || "%"
 ENDSQL
 
 go build ./models

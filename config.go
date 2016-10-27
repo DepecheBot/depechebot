@@ -13,22 +13,20 @@ type Request struct {
 	Text string //map[LanguageType]string
 	unprescribed bool
 }
-type ResponseFunc func(Chat, tgbotapi.Update, *State, *Groups)
+type ResponseFunc func(Chat, tgbotapi.Update, *State, *Params)
 type Responser interface {
-	Response(Chat, tgbotapi.Update, *State, *Groups)
+	Response(Chat, tgbotapi.Update, *State, *Params)
 }
 type Responsers []Responser
 type ReqToRes map[Request]Responser
 //type State string
 type StateName string
 type jsonMap string
+type Params jsonMap
 type State struct {
 	Name StateName `json:"name"`
-	Parameters jsonMap `json:"parameters"`
+	Params jsonMap `json:"params"`
 	skipBefore bool `json:"-"`
-}
-type Groups struct {
-	Parameters jsonMap
 }
 type Text struct {
 	Text string
@@ -41,7 +39,7 @@ type Photo struct {
 type StateActions struct {
 	Before func(Chat)
 	While func(<-chan Signal) Signal
-	After func(Chat, tgbotapi.Update, *State, *Groups)
+	After func(Chat, tgbotapi.Update, *State, *Params)
 }
 
 func NewText(s string) Text {
@@ -64,14 +62,14 @@ func NewPhotoWithCaption(fileID string, caption string) Photo {
 func NewState(s string) State {
 	return State{
 		Name : StateName(s),
-		Parameters : "{}",
+		Params : "{}",
 	}
 }
 
-func NewGroups(key, value string) Groups {
-	groups := Groups{Parameters : jsonMap("{}")}
-	groups.Parameters.Set(key, value)
-	return groups
+func NewParams(key, value string) Params {
+	params := Params(jsonMap("{}"))
+	params.Set(key, value)
+	return params
 }
 
 func NewRequest(s string) Request {
@@ -93,27 +91,27 @@ func (state State) SkippedBefore() State {
 	return state
 }
 
-func (state State) WithParameter(key, value string) State {
+func (state State) WithParam(key, value string) State {
 	newState := state
-	(&newState.Parameters).Set(key, value)
+	(&newState.Params).Set(key, value)
 	return newState
 }
 
 func (state State) String() string {
-	if state.Parameters != "{}" {
-		return fmt.Sprintf("%v with parameters: %v", state.Name, state.Parameters)
+	if state.Params != "{}" {
+		return fmt.Sprintf("%v with params: %v", state.Name, state.Params)
 	} else {
 		return fmt.Sprintf("%v", state.Name)
 	}
 }
 
-func (groups *Groups) AddGroups(newGroups Groups) {
+func (params *Params) AddParams(newParams Params) {
 	var m1 map[string]string
 
-	json.Unmarshal([]byte(newGroups.Parameters), &m1)
-	//json.Unmarshal([]byte(groups), &m2)
+	json.Unmarshal([]byte(newParams), &m1)
+	//json.Unmarshal([]byte(params), &m2)
 	for key, value := range m1 {
-		groups.Parameters.Set(key, value)
+		params.Set(key, value)
 	}
 }
 
@@ -122,6 +120,10 @@ func (jm jsonMap) Get(key string) string {
 
 	check(json.Unmarshal([]byte(jm), &m))
 	return m[key]
+}
+
+func (p Params) Get(key string) string {
+	return jsonMap(p).Get(key)
 }
 
 func (jm *jsonMap) Set(key, value string) {
@@ -135,18 +137,27 @@ func (jm *jsonMap) Set(key, value string) {
 	*jm = jsonMap(marshal(m))
 }
 
+func (p *Params) Set(key, value string) {
+	(*jsonMap)(p).Set(key, value)
+}
+
 func (jm jsonMap) With(key, value string) jsonMap {
 	newJM := jm
 	(&newJM).Set(key, value)
 	return newJM
 }
 
+func (p Params) With(key, value string) Params {
+	return Params(jsonMap(p).With(key, value))
+}
+
+
 var (
 	StartState = NewState("START")
 )
 
 
-func UniversalResponse(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+func UniversalResponse(chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	//*state = StartState
 	// todo: fixme!!! Need to initialize UniversalResponse in config
 	*state = NewState("MAIN")
@@ -181,17 +192,17 @@ func StateWhile() func(<-chan Signal) Signal {
 	}
 }
 
-func StateAfter(responsers ...Responser) func(Chat, tgbotapi.Update, *State, *Groups) {
+func StateAfter(responsers ...Responser) func(Chat, tgbotapi.Update, *State, *Params) {
 	return Responsers(responsers).Response
 }
 
-func (responsers Responsers) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+func (responsers Responsers) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	for _, responser := range responsers {
-		responser.Response(chat, update, state, groups)
+		responser.Response(chat, update, state, params)
 	}
 }
 
-func (text Text) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+func (text Text) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	if text.Text != "" {
 		msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
 		msg.ParseMode = text.ParseMode
@@ -200,7 +211,7 @@ func (text Text) Response(chat Chat, update tgbotapi.Update, state *State, group
 }
 
 
-func (photo Photo) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+func (photo Photo) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.FileID)
 	if photo.Caption != "" {
 		msg.Caption = photo.Caption
@@ -208,31 +219,31 @@ func (photo Photo) Response(chat Chat, update tgbotapi.Update, state *State, gro
 	SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 }
 
-func (newState State) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+func (newState State) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	*state = newState
 }
 
-func (newGroups Groups) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
-	groups.AddGroups(newGroups)
+func (newParams Params) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+	params.AddParams(newParams)
 }
 
-func (responses ReqToRes) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
+func (responses ReqToRes) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	response, ok := responses[NewRequest(update.Message.Text)]
 	if !ok {
 		response, ok = responses[NewUnprescribedRequest()]
 		if !ok {
 			//response = UniversalResponse
-			UniversalResponse(chat, update, state, groups)
+			UniversalResponse(chat, update, state, params)
 			log.Printf("no response %v in responses %v\n", update.Message.Text, responses)
 			return
 		}
 	}
 
-	response.Response(chat, update, state, groups)
+	response.Response(chat, update, state, params)
 }
 
-func (responseFunc ResponseFunc) Response(chat Chat, update tgbotapi.Update, state *State, groups *Groups) {
-	responseFunc(chat, update, state, groups)
+func (responseFunc ResponseFunc) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+	responseFunc(chat, update, state, params)
 }
 
 

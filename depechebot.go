@@ -120,8 +120,8 @@ func processUpdates(updates <-chan tgbotapi.Update) {
 				LastName: update.Message.From.LastName,
 				OpenTime: time.Now().String(),
 				LastTime: time.Now().String(),
-				Groups: "{}",
 				State: marshal(StartState),
+				Params: "{}",
 			}
 		}
 
@@ -185,7 +185,7 @@ func updateChat(update tgbotapi.Update, chat *models.Chat) {
 func processChat(chat *models.Chat, signalChan <-chan Signal) {
 	var update tgbotapi.Update
 	var state State
-	var groups Groups
+	var params Params
 	var statesConfig map[StateName]StateActions
 
 	if chat.Type == "private" {
@@ -197,7 +197,7 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 	for {
 		err := json.Unmarshal([]byte(chat.State), &state)
 		check(err)
-		groups.Parameters = jsonMap(chat.Groups)
+		params = Params(jsonMap(chat.Params))
 
 		if _, ok := statesConfig[state.Name]; !ok {
 			log.Panicf("No such state: %v", state.Name)
@@ -251,9 +251,9 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 
 		// todo: consider chat.Abandoned from here?
 		if after != nil {
-			after(Chat(*chat), update, &state, &groups) // todo: fix int64
+			after(Chat(*chat), update, &state, &params) // todo: fix int64
 			chat.State = marshal(state)
-			chat.Groups = string(groups.Parameters)
+			chat.Params = string(params)
 
 			log.Printf("    State after: %v", state)
 		}
