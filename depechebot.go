@@ -1,23 +1,24 @@
 package depechebot
 
 import (
+	"encoding/json"
 	"log"
 	"time"
-	"encoding/json"
 
-	tgbotapi "gopkg.in/telegram-bot-api.v4"
 	db "github.com/depechebot/depechebot/database"
 	models "github.com/depechebot/depechebot/database/models"
+	tgbotapi "gopkg.in/telegram-bot-api.v4"
 )
 
 const (
-	chatChanBufSize = 100
-	sendChanBufSize = 1000
+	chatChanBufSize      = 100
+	sendChanBufSize      = 1000
 	sendBroadChanBufSize = 100
-	telegramTimeout = 60 //msec
+	telegramTimeout      = 60 //msec
 )
 
 type Chat models.Chat
+
 // todo: split, do we need to store it together?
 type ChatChan struct {
 	*models.Chat
@@ -41,26 +42,26 @@ type BroadSignal struct {
 type Config struct {
 	TelegramToken string
 	//AdminLog func()
-	CommonLog func(tgbotapi.Update)
-	ChatLog func(tgbotapi.Update, Chat)
+	CommonLog           func(tgbotapi.Update)
+	ChatLog             func(tgbotapi.Update, Chat)
 	StatesConfigPrivate map[StateName]StateActions
-	StatesConfigGroup map[StateName]StateActions
-	DBName string
+	StatesConfigGroup   map[StateName]StateActions
+	DBName              string
 }
 
 type Bot struct {
-	SendChan chan ChatSignal
+	SendChan      chan ChatSignal
 	SendBroadChan chan BroadSignal
 
 	config Config
-	chats map[int]*ChatChan
-	api *tgbotapi.BotAPI
+	chats  map[int]*ChatChan
+	api    *tgbotapi.BotAPI
 }
 
 func New(c Config) (Bot, error) {
 	var err error
 
-	bot := Bot{config : c}
+	bot := Bot{config: c}
 	bot.chats = make(map[int]*ChatChan)
 	bot.SendChan = make(chan ChatSignal, sendChanBufSize)
 	bot.SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
@@ -76,7 +77,6 @@ func New(c Config) (Bot, error) {
 func (b Bot) Run() {
 	var err error
 
-
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
 	db.InitDB(b.config.DBName)
@@ -89,7 +89,7 @@ func (b Bot) Run() {
 	for i, chat = range db.Chats {
 		b.chats[chat.ChatID] = &ChatChan{chat, make(chan Signal, chatChanBufSize)}
 	}
-	log.Printf("Loaded %v chats from DB file %v\n", i + 1, b.config.DBName)
+	log.Printf("Loaded %v chats from DB file %v\n", i+1, b.config.DBName)
 
 	for _, chat = range db.Chats {
 		go b.processChat(b.chats[chat.ChatID].Chat, b.chats[chat.ChatID].signalChan)
@@ -124,17 +124,17 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 			b.chats[chatID] = chat
 
 			chat.Chat = &models.Chat{
-				ChatID: chatID,
+				ChatID:    chatID,
 				Abandoned: bool2int(false),
-				Type : update.Message.Chat.Type,
-				UserID: update.Message.From.ID,
-				UserName: update.Message.From.UserName,
+				Type:      update.Message.Chat.Type,
+				UserID:    update.Message.From.ID,
+				UserName:  update.Message.From.UserName,
 				FirstName: update.Message.From.FirstName,
-				LastName: update.Message.From.LastName,
-				OpenTime: time.Now().String(),
-				LastTime: time.Now().String(),
-				State: marshal(StartState),
-				Params: "{}",
+				LastName:  update.Message.From.LastName,
+				OpenTime:  time.Now().String(),
+				LastTime:  time.Now().String(),
+				State:     marshal(StartState),
+				Params:    "{}",
 			}
 		}
 
@@ -151,7 +151,6 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 		}
 	}
 }
-
 
 func (b Bot) updateChat(update tgbotapi.Update, chat *models.Chat) {
 
@@ -180,7 +179,6 @@ func (b Bot) updateChat(update tgbotapi.Update, chat *models.Chat) {
 	if update.Message.MigrateFromChatID != 0 {
 		// todo: need to do more here to migrate
 	}
-
 
 	chat.Abandoned = bool2int(abandoned)
 	chat.UserName = update.Message.From.UserName

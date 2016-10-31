@@ -1,8 +1,8 @@
 package depechebot
 
 import (
-	"log"
 	"encoding/json"
+	"log"
 )
 
 func check(err error) {

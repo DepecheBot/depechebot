@@ -52,4 +52,3 @@ func LoadChatsFromDB() error {
 }
 
 //writeToDB()
-

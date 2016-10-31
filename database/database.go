@@ -9,7 +9,6 @@ import (
 
 var DB *sql.DB
 
-
 func InitDB(dataSourceName string) {
 	var err error
 	DB, err = sql.Open("sqlite3", dataSourceName)

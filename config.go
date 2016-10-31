@@ -1,16 +1,16 @@
 package depechebot
 
 import (
-	"log"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
 )
 
 //type LanguageType string
 type Request struct {
-	Text string //map[LanguageType]string
+	Text         string //map[LanguageType]string
 	unprescribed bool
 }
 type ResponseFunc func(Bot, Chat, tgbotapi.Update, *State, *Params)
@@ -19,50 +19,51 @@ type Responser interface {
 }
 type Responsers []Responser
 type ReqToRes map[Request]Responser
+
 //type State string
 type StateName string
 type jsonMap string
 type Params jsonMap
 type State struct {
-	Name StateName `json:"name"`
-	Params jsonMap `json:"params"`
-	skipBefore bool `json:"-"`
+	Name       StateName `json:"name"`
+	Params     jsonMap   `json:"params"`
+	skipBefore bool      `json:"-"`
 }
 type Text struct {
-	Text string
+	Text      string
 	ParseMode string
 }
 type Photo struct {
 	Caption string
-	FileID string
+	FileID  string
 }
 type StateActions struct {
 	Before func(Bot, Chat)
-	While func(Bot, <-chan Signal) Signal
-	After func(Bot, Chat, tgbotapi.Update, *State, *Params)
+	While  func(Bot, <-chan Signal) Signal
+	After  func(Bot, Chat, tgbotapi.Update, *State, *Params)
 }
 
 func NewText(s string) Text {
-	return Text{Text : s}
+	return Text{Text: s}
 }
 func NewTextWithMarkdown(s string) Text {
-	return Text{Text : s, ParseMode : tgbotapi.ModeMarkdown}
+	return Text{Text: s, ParseMode: tgbotapi.ModeMarkdown}
 }
 func NewPhoto(fileID string) Photo {
-	return Photo{FileID : fileID}
+	return Photo{FileID: fileID}
 }
 
 func NewPhotoWithCaption(fileID string, caption string) Photo {
 	return Photo{
-		FileID : fileID,
-		Caption : caption,
+		FileID:  fileID,
+		Caption: caption,
 	}
 }
 
 func NewState(s string) State {
 	return State{
-		Name : StateName(s),
-		Params : "{}",
+		Name:   StateName(s),
+		Params: "{}",
 	}
 }
 
@@ -74,15 +75,15 @@ func NewParams(key, value string) Params {
 
 func NewRequest(s string) Request {
 	return Request{
-		Text : s,
-		unprescribed : false,
+		Text:         s,
+		unprescribed: false,
 	}
 }
 
 func NewUnprescribedRequest() Request {
 	return Request{
-		Text : "",
-		unprescribed : true,
+		Text:         "",
+		unprescribed: true,
 	}
 }
 
@@ -151,11 +152,9 @@ func (p Params) With(key, value string) Params {
 	return Params(jsonMap(p).With(key, value))
 }
 
-
 var (
 	StartState = NewState("START")
 )
-
 
 func UniversalResponse(chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	//*state = StartState
@@ -176,7 +175,7 @@ func StateBefore(text Text, keyboard interface{}) func(bot Bot, chat Chat) {
 			msg.ReplyMarkup = Keyboard([][]Request{keyboard})
 		case Request:
 			if keyboard == NewUnprescribedRequest() {
-				msg.ReplyMarkup = tgbotapi.ReplyKeyboardHide{HideKeyboard : true}
+				msg.ReplyMarkup = tgbotapi.ReplyKeyboardHide{HideKeyboard: true}
 			} else {
 				msg.ReplyMarkup = Keyboard([][]Request{{keyboard}})
 			}
@@ -209,7 +208,6 @@ func (text Text) Response(bot Bot, chat Chat, update tgbotapi.Update, state *Sta
 		bot.SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 	}
 }
-
 
 func (photo Photo) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.FileID)
@@ -245,8 +243,6 @@ func (responses ReqToRes) Response(bot Bot, chat Chat, update tgbotapi.Update, s
 func (responseFunc ResponseFunc) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	responseFunc(bot, chat, update, state, params)
 }
-
-
 
 func Keyboard(keyboard [][]Request) tgbotapi.ReplyKeyboardMarkup {
 	var Keyboard [][]tgbotapi.KeyboardButton
