@@ -27,7 +27,7 @@ type Params jsonMap
 type State struct {
 	Name       StateName `json:"name"`
 	Params     jsonMap   `json:"params"`
-	skipBefore bool      `json:"-"`
+	skipBefore bool
 }
 type Text struct {
 	Text      string
