@@ -13,9 +13,9 @@ type Request struct {
 	Text string //map[LanguageType]string
 	unprescribed bool
 }
-type ResponseFunc func(Chat, tgbotapi.Update, *State, *Params)
+type ResponseFunc func(Bot, Chat, tgbotapi.Update, *State, *Params)
 type Responser interface {
-	Response(Chat, tgbotapi.Update, *State, *Params)
+	Response(Bot, Chat, tgbotapi.Update, *State, *Params)
 }
 type Responsers []Responser
 type ReqToRes map[Request]Responser
@@ -37,9 +37,9 @@ type Photo struct {
 	FileID string
 }
 type StateActions struct {
-	Before func(Chat)
-	While func(<-chan Signal) Signal
-	After func(Chat, tgbotapi.Update, *State, *Params)
+	Before func(Bot, Chat)
+	While func(Bot, <-chan Signal) Signal
+	After func(Bot, Chat, tgbotapi.Update, *State, *Params)
 }
 
 func NewText(s string) Text {
@@ -163,8 +163,8 @@ func UniversalResponse(chat Chat, update tgbotapi.Update, state *State, params *
 	*state = NewState("MAIN")
 }
 
-func StateBefore(text Text, keyboard interface{}) func(chat Chat) {
-	return func(chat Chat) {
+func StateBefore(text Text, keyboard interface{}) func(bot Bot, chat Chat) {
+	return func(bot Bot, chat Chat) {
 		msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
 		msg.ParseMode = text.ParseMode
 		switch keyboard := keyboard.(type) {
@@ -182,52 +182,52 @@ func StateBefore(text Text, keyboard interface{}) func(chat Chat) {
 			}
 		}
 
-		SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
+		bot.SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 	}
 }
 
-func StateWhile() func(<-chan Signal) Signal {
-	return func(signalChan <-chan Signal) Signal {
+func StateWhile() func(Bot, <-chan Signal) Signal {
+	return func(bot Bot, signalChan <-chan Signal) Signal {
 		return <-signalChan
 	}
 }
 
-func StateAfter(responsers ...Responser) func(Chat, tgbotapi.Update, *State, *Params) {
+func StateAfter(responsers ...Responser) func(Bot, Chat, tgbotapi.Update, *State, *Params) {
 	return Responsers(responsers).Response
 }
 
-func (responsers Responsers) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+func (responsers Responsers) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	for _, responser := range responsers {
-		responser.Response(chat, update, state, params)
+		responser.Response(bot, chat, update, state, params)
 	}
 }
 
-func (text Text) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+func (text Text) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	if text.Text != "" {
 		msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
 		msg.ParseMode = text.ParseMode
-		SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
+		bot.SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 	}
 }
 
 
-func (photo Photo) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+func (photo Photo) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	msg := tgbotapi.NewPhotoShare(int64(chat.ChatID), photo.FileID)
 	if photo.Caption != "" {
 		msg.Caption = photo.Caption
 	}
-	SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
+	bot.SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
 }
 
-func (newState State) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+func (newState State) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	*state = newState
 }
 
-func (newParams Params) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+func (newParams Params) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	params.AddParams(newParams)
 }
 
-func (responses ReqToRes) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
+func (responses ReqToRes) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
 	response, ok := responses[NewRequest(update.Message.Text)]
 	if !ok {
 		response, ok = responses[NewUnprescribedRequest()]
@@ -239,11 +239,11 @@ func (responses ReqToRes) Response(chat Chat, update tgbotapi.Update, state *Sta
 		}
 	}
 
-	response.Response(chat, update, state, params)
+	response.Response(bot, chat, update, state, params)
 }
 
-func (responseFunc ResponseFunc) Response(chat Chat, update tgbotapi.Update, state *State, params *Params) {
-	responseFunc(chat, update, state, params)
+func (responseFunc ResponseFunc) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
+	responseFunc(bot, chat, update, state, params)
 }
 
 

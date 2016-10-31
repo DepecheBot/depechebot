@@ -26,9 +26,6 @@ type ChatChan struct {
 
 type ChatIDType int64
 
-var chats = map[int]*ChatChan {}
-var bot *tgbotapi.BotAPI
-
 // Signal could be either tgbotapi.Chattable (or tgbotapi.MessageConfig),
 // State (interrupt state) or tgbotapi.Update
 type Signal interface{}
@@ -40,30 +37,49 @@ type BroadSignal struct {
 	Signal
 	List []ChatIDType
 }
-var SendChan chan ChatSignal
-var SendBroadChan chan BroadSignal
 
-var StatesConfigPrivate map[StateName]StateActions
-var StatesConfigGroup map[StateName]StateActions
-var CommonLog func(tgbotapi.Update)
-var ChatLog func(tgbotapi.Update, Chat)
-
-
-func DepecheBot() {
-
+type Config struct {
+	TelegramToken string
+	//AdminLog func()
+	CommonLog func(tgbotapi.Update)
+	ChatLog func(tgbotapi.Update, Chat)
+	StatesConfigPrivate map[StateName]StateActions
+	StatesConfigGroup map[StateName]StateActions
+	DBName string
 }
 
-func init() {
+type Bot struct {
+	SendChan chan ChatSignal
+	SendBroadChan chan BroadSignal
+
+	config Config
+	chats map[int]*ChatChan
+	api *tgbotapi.BotAPI
 }
 
-func Init(telegramToken string, dbName string) {
+func New(c Config) (Bot, error) {
 	var err error
 
-	bot, err = tgbotapi.NewBotAPI(telegramToken)
-	check(err)
-	log.Printf("Authorized on account %s", bot.Self.UserName)
+	bot := Bot{config : c}
+	bot.chats = make(map[int]*ChatChan)
+	bot.SendChan = make(chan ChatSignal, sendChanBufSize)
+	bot.SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
 
-	db.InitDB(dbName)
+	bot.api, err = tgbotapi.NewBotAPI(bot.config.TelegramToken)
+	if err != nil {
+		return bot, err
+	}
+
+	return bot, nil
+}
+
+func (b Bot) Run() {
+	var err error
+
+
+	log.Printf("Authorized on account %s", b.api.Self.UserName)
+
+	db.InitDB(b.config.DBName)
 	defer db.DB.Close()
 	err = db.LoadChatsFromDB()
 	check(err)
@@ -71,32 +87,29 @@ func Init(telegramToken string, dbName string) {
 	var i int
 	var chat *models.Chat
 	for i, chat = range db.Chats {
-		chats[chat.ChatID] = &ChatChan{chat, make(chan Signal, chatChanBufSize)}
+		b.chats[chat.ChatID] = &ChatChan{chat, make(chan Signal, chatChanBufSize)}
 	}
-	log.Printf("Loaded %v chats from DB file %v\n", i + 1, dbName)
-
-	SendChan = make(chan ChatSignal, sendChanBufSize)
-	SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
+	log.Printf("Loaded %v chats from DB file %v\n", i + 1, b.config.DBName)
 
 	for _, chat = range db.Chats {
-		go processChat(chats[chat.ChatID].Chat, chats[chat.ChatID].signalChan)
+		go b.processChat(b.chats[chat.ChatID].Chat, b.chats[chat.ChatID].signalChan)
 	}
 
-	go processSendChan()
-	go processSendBroadChan()
+	go b.processSendChan()
+	go b.processSendBroadChan()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = telegramTimeout
-	updates, err := bot.GetUpdatesChan(u)
+	updates, err := b.api.GetUpdatesChan(u)
 
-	processUpdates(updates)
+	b.processUpdates(updates)
 }
 
-func processUpdates(updates <-chan tgbotapi.Update) {
+func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 
 	for update := range updates {
 
-		CommonLog(update)
+		b.config.CommonLog(update)
 
 		// todo: update.Query and so on...
 		if update.Message == nil {
@@ -104,11 +117,11 @@ func processUpdates(updates <-chan tgbotapi.Update) {
 		}
 
 		chatID := int(update.Message.Chat.ID) // todo: fix int() for 32-bit
-		chat, ok := chats[chatID]
+		chat, ok := b.chats[chatID]
 
 		if !ok {
 			chat = &ChatChan{}
-			chats[chatID] = chat
+			b.chats[chatID] = chat
 
 			chat.Chat = &models.Chat{
 				ChatID: chatID,
@@ -127,7 +140,7 @@ func processUpdates(updates <-chan tgbotapi.Update) {
 
 		if chat.signalChan == nil {
 			chat.signalChan = make(chan Signal, chatChanBufSize)
-			go processChat(chat.Chat, chat.signalChan)
+			go b.processChat(chat.Chat, chat.signalChan)
 		}
 
 		select {
@@ -140,24 +153,24 @@ func processUpdates(updates <-chan tgbotapi.Update) {
 }
 
 
-func updateChat(update tgbotapi.Update, chat *models.Chat) {
+func (b Bot) updateChat(update tgbotapi.Update, chat *models.Chat) {
 
 	var abandoned = false
 	// checked either bot is kicked itself or he is alone now
 	if update.Message.LeftChatMember != nil {
-		if update.Message.LeftChatMember.ID == bot.Self.ID {
+		if update.Message.LeftChatMember.ID == b.api.Self.ID {
 			abandoned = true
 		} else {
-			count, err := bot.GetChatMembersCount(update.Message.Chat.ChatConfig())
+			count, err := b.api.GetChatMembersCount(update.Message.Chat.ChatConfig())
 			check(err)
 			if count == 1 {
 				abandoned = true
-				bot.LeaveChat(update.Message.Chat.ChatConfig())
+				b.api.LeaveChat(update.Message.Chat.ChatConfig())
 			}
 		}
 	}
 	if update.Message.NewChatMember != nil &&
-		update.Message.NewChatMember.ID == bot.Self.ID {
+		update.Message.NewChatMember.ID == b.api.Self.ID {
 		abandoned = false
 	}
 	if update.Message.MigrateToChatID != 0 {
@@ -182,16 +195,16 @@ func updateChat(update tgbotapi.Update, chat *models.Chat) {
 }
 
 // goroutine
-func processChat(chat *models.Chat, signalChan <-chan Signal) {
+func (b Bot) processChat(chat *models.Chat, signalChan <-chan Signal) {
 	var update tgbotapi.Update
 	var state State
 	var params Params
 	var statesConfig map[StateName]StateActions
 
 	if chat.Type == "private" {
-		statesConfig = StatesConfigPrivate
+		statesConfig = b.config.StatesConfigPrivate
 	} else {
-		statesConfig = StatesConfigGroup
+		statesConfig = b.config.StatesConfigGroup
 	}
 
 	for {
@@ -208,13 +221,13 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 		if while != nil {
 		WhileLoop:
 			for {
-				signal := while(signalChan)
+				signal := while(b, signalChan)
 
 				switch signal := signal.(type) {
 				case tgbotapi.Update:
 					update = signal
-					updateChat(update, chat)
-					ChatLog(update, Chat(*chat))
+					b.updateChat(update, chat)
+					b.config.ChatLog(update, Chat(*chat))
 					break WhileLoop
 				case State:
 					state = signal
@@ -224,7 +237,7 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 				case tgbotapi.MessageConfig:
 					msg := signal
 					msg.ChatID = int64(chat.ChatID)
-					_, err := bot.Send(msg)
+					_, err := b.api.Send(msg)
 					if err != nil {
 						log.Printf("Failed to send (%v): error \"%v\"\n", marshal(msg), err)
 						if err.Error() == "forbidden" {
@@ -235,7 +248,7 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 				case tgbotapi.Chattable: // todo: leave only one of MessageConfig and Chattable
 					msg := signal
 					// fix ChatID in this message!!
-					_, err := bot.Send(msg)
+					_, err := b.api.Send(msg)
 					if err != nil {
 						log.Printf("Failed to send (%v): error \"%v\"\n", marshal(msg), err)
 						if err.Error() == "forbidden" {
@@ -251,7 +264,7 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 
 		// todo: consider chat.Abandoned from here?
 		if after != nil {
-			after(Chat(*chat), update, &state, &params) // todo: fix int64
+			after(b, Chat(*chat), update, &state, &params) // todo: fix int64
 			chat.State = marshal(state)
 			chat.Params = string(params)
 
@@ -262,7 +275,7 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 		if !state.skipBefore {
 			before := statesConfig[state.Name].Before // todo: fix int64
 			if before != nil {
-				before(Chat(*chat)) // todo: fix int64
+				before(b, Chat(*chat)) // todo: fix int64
 			}
 		}
 
@@ -272,28 +285,28 @@ func processChat(chat *models.Chat, signalChan <-chan Signal) {
 }
 
 // goroutine
-func processSendChan() {
+func (b Bot) processSendChan() {
 	const (
 		commonDelay = time.Second / 30
 	)
 
-	for chatSignal := range SendChan {
+	for chatSignal := range b.SendChan {
 		// todo: fix race!
-		chats[int(chatSignal.ChatID)].signalChan <- chatSignal.Signal
+		b.chats[int(chatSignal.ChatID)].signalChan <- chatSignal.Signal
 		time.Sleep(commonDelay)
 	}
 }
 
 // goroutine
-func processSendBroadChan() {
+func (b Bot) processSendBroadChan() {
 	const (
 		commonDelay = time.Second / 30
 	)
 
-	for broadSignal := range SendBroadChan {
+	for broadSignal := range b.SendBroadChan {
 		for _, chatID := range broadSignal.List {
 			// todo: fix race!
-			chats[int(chatID)].signalChan <- broadSignal.Signal
+			b.chats[int(chatID)].signalChan <- broadSignal.Signal
 			time.Sleep(commonDelay)
 		}
 	}
