@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/depechebot/depechebot/model"
+	dbot "github.com/depechebot/depechebot"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestSqlite3ModelInit(t *testing.T) {
-	var m model.Model
+	var m dbot.Model
 
 	db, err := sql.Open("sqlite3", "./test.sqlite3")
 	if err != nil {
@@ -18,15 +18,15 @@ func TestSqlite3ModelInit(t *testing.T) {
 	}
 
 	m = NewModel(db)
-	num, err := m.Init()
+	chatIDs, err := m.Init()
 	if err != nil {
 		t.Error(err)
 	}
-	t.Logf("Number of loaded chats: %d", num)
+	t.Logf("Number of loaded chats: %d", len(chatIDs))
 }
 
 func TestSqlite3ModelSaveRetrieveDelete(t *testing.T) {
-	var m model.Model
+	var m dbot.Model
 
 	db, err := sql.Open("sqlite3", "./test2.sqlite3")
 	if err != nil {
@@ -34,15 +34,15 @@ func TestSqlite3ModelSaveRetrieveDelete(t *testing.T) {
 	}
 
 	m = NewModel(db)
-	num, err := m.Init()
+	chatIDs, err := m.Init()
 	if err != nil {
 		t.Error(err)
 	}
-	t.Logf("Number of loaded chats: %d", num)
+	t.Logf("Number of loaded chats: %d", len(chatIDs))
 
-	params := model.Params(map[string]string{"foo": "bar", "noo": "bab"})
-	state := model.State{Name: "TestState", Params: params}
-	chat := &model.Chat{
+	params := dbot.Params(map[string]string{"foo": "bar", "noo": "bab"})
+	state := dbot.State{Name: "TEST", Params: params}
+	chat := &dbot.Chat{
 		ChatID:    88000111222,
 		Abandoned: false,
 		Type:      "private",
@@ -124,6 +124,49 @@ func TestSqlite3ModelSaveRetrieveDelete(t *testing.T) {
 	_, err = m.ChatByChatID(chatID)
 	if err == nil {
 		t.Error("Deleted chat retrieved with no error!")
+	}
+
+}
+
+func TestSqlite3ModelStateParams(t *testing.T) {
+	var m dbot.Model
+
+	db, err := sql.Open("sqlite3", "./test3.sqlite3")
+	if err != nil {
+		t.Error(err)
+	}
+
+	m = NewModel(db)
+	chatIDs, err := m.Init()
+	if err != nil {
+		t.Error(err)
+	}
+	t.Logf("Number of loaded chats: %d", len(chatIDs))
+
+	params := dbot.Params(map[string]string{"foo": "bar", "noo": "bab"})
+	state := dbot.State{Name: "TEST", Params: dbot.Params{}}
+	chat := &dbot.Chat{
+		ChatID:    88000111222,
+		Abandoned: false,
+		Type:      "private",
+		UserID:    123232,
+		UserName:  "username",
+		FirstName: "first_name",
+		LastName:  "Вава",
+		OpenTime:  time.Now(),
+		LastTime:  time.Now(),
+		State:     state,
+		Params:    params,
+	}
+
+	err = m.Save(chat)
+	if err != nil {
+		t.Error(err)
+	}
+
+	chat, err = m.ChatByChatID(chat.ChatID)
+	if err != nil {
+		t.Error(err)
 	}
 
 }

@@ -1,13 +1,13 @@
 // package model represents Model for depechebot chats data
-package model
+package depechebot
 
 import "time"
 
 // Model of depechebot data.
 type Model interface {
 	// Init initializes model.
-	// num is the number of existing chats.
-	Init() (num int, err error)
+	// chatIDs stores existing chats ChatID.
+	Init() (chatIDs []ChatID, err error)
 
 	Exists(*Chat) (bool, error)
 	Insert(*Chat) error
@@ -16,14 +16,14 @@ type Model interface {
 	Delete(*Chat) error
 
 	ChatByPrimaryID(id int) (*Chat, error)
-	ChatByChatID(id int64) (*Chat, error)
+	ChatByChatID(id ChatID) (*Chat, error)
 	ChatsByParam(param string) ([]*Chat, error)
 }
 
 // Chat represents a row from 'chat'.
 type Chat struct {
 	PrimaryID int       `json:"primary_id"`
-	ChatID    int64     `json:"chat_id"`
+	ChatID    ChatID    `json:"chat_id"`
 	Type      string    `json:"type"`
 	Abandoned bool      `json:"abandoned"`
 	UserID    int       `json:"user_id"`
@@ -41,6 +41,9 @@ type Params map[string]string
 
 // StateName
 type StateName string
+
+// ChatID
+type ChatID int64
 
 // State
 type State struct {

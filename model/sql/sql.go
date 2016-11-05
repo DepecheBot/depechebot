@@ -3,15 +3,14 @@ package sql
 import (
 	"database/sql"
 	"encoding/json"
-	//"errors"
 
-	"github.com/depechebot/depechebot/model"
+	dbot "github.com/depechebot/depechebot"
 )
 
 type Model struct {
 	db *sql.DB
 	//tableName string
-	//chats []*model.Chat
+	//chats []*dbot.Chat
 }
 
 func NewModel(db *sql.DB) Model {
@@ -20,19 +19,37 @@ func NewModel(db *sql.DB) Model {
 
 // Init initializes model.
 // num is the number of existing chats.
-func (m Model) Init() (num int, err error) {
+func (m Model) Init() (chatIDs []dbot.ChatID, err error) {
+
+	err = m.db.Ping()
+	if err != nil {
+		return nil, err
+	}
 
 	err = m.createTable()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	num, err = m.countChats()
+	const sqlstr = `SELECT chat_id from ` + `chat`
+	q, err := m.db.Query(sqlstr)
 	if err != nil {
-		return 0, err
+		return nil, err
+	}
+	defer q.Close()
+
+	var chatID dbot.ChatID
+	chatIDs = []dbot.ChatID{}
+	for q.Next() {
+		err = q.Scan(&chatID)
+		if err != nil {
+			return nil, err
+		}
+
+		chatIDs = append(chatIDs, chatID)
 	}
 
-	return num, nil
+	return chatIDs, nil
 }
 
 func (m Model) createTable() error {
@@ -60,14 +77,8 @@ func (m Model) createTable() error {
 	return err
 }
 
-func (m Model) countChats() (cnt int, err error) {
-	const sqlstr = `SELECT count(*) as count from ` + `chat`
-	err = m.db.QueryRow(sqlstr).Scan(&cnt)
-	return cnt, err
-}
-
 // Exists determines if the Chat exists in the database.
-func (m Model) Exists(c *model.Chat) (exists bool, err error) {
+func (m Model) Exists(c *dbot.Chat) (exists bool, err error) {
 	var cnt int
 	var sqlstr = `SELECT count(*) as count from ` + `chat` + ` where chat_id = ?`
 	err = m.db.QueryRow(sqlstr, c.ChatID).Scan(&cnt)
@@ -76,7 +87,7 @@ func (m Model) Exists(c *model.Chat) (exists bool, err error) {
 
 // Insert inserts chat to the database.
 // Sets c.PrimaryID.
-func (m Model) Insert(c *model.Chat) error {
+func (m Model) Insert(c *dbot.Chat) error {
 	var err error
 
 	const sqlstr = `INSERT INTO chat (` +
@@ -111,7 +122,7 @@ func (m Model) Insert(c *model.Chat) error {
 }
 
 // Update updates the Chat in the database.
-func (m Model) Update(c *model.Chat) error {
+func (m Model) Update(c *dbot.Chat) error {
 	var err error
 
 	const sqlstr = `UPDATE chat SET ` +
@@ -135,7 +146,7 @@ func (m Model) Update(c *model.Chat) error {
 
 // Save saves the Chat to the database.
 // Prefer Update() if you know that chat exists.
-func (m Model) Save(c *model.Chat) error {
+func (m Model) Save(c *dbot.Chat) error {
 	exists, err := m.Exists(c)
 	if err != nil {
 		return err
@@ -148,7 +159,7 @@ func (m Model) Save(c *model.Chat) error {
 }
 
 // Delete deletes the Chat from the database.
-func (m Model) Delete(c *model.Chat) error {
+func (m Model) Delete(c *dbot.Chat) error {
 	var err error
 
 	const sqlstr = `DELETE FROM chat WHERE chat_id = ?`
@@ -158,7 +169,7 @@ func (m Model) Delete(c *model.Chat) error {
 }
 
 // ChatByPrimaryID retrieves a chat by primaryID.
-func (m Model) ChatByPrimaryID(primaryID int) (*model.Chat, error) {
+func (m Model) ChatByPrimaryID(primaryID int) (*dbot.Chat, error) {
 	var err error
 	var state, params string
 
@@ -167,7 +178,7 @@ func (m Model) ChatByPrimaryID(primaryID int) (*model.Chat, error) {
 		`FROM chat ` +
 		`WHERE primary_id = ?`
 
-	c := model.Chat{}
+	c := dbot.Chat{}
 	err = m.db.QueryRow(sqlstr, primaryID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName,
 		&c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &state, &params)
 	if err != nil {
@@ -188,7 +199,7 @@ func (m Model) ChatByPrimaryID(primaryID int) (*model.Chat, error) {
 }
 
 // ChatByChatID retrieves a chat by chatID.
-func (m Model) ChatByChatID(chatID int64) (*model.Chat, error) {
+func (m Model) ChatByChatID(chatID dbot.ChatID) (*dbot.Chat, error) {
 	var err error
 	var state, params string
 
@@ -197,7 +208,7 @@ func (m Model) ChatByChatID(chatID int64) (*model.Chat, error) {
 		`FROM chat ` +
 		`WHERE chat_id = ?`
 
-	c := model.Chat{}
+	c := dbot.Chat{}
 	err = m.db.QueryRow(sqlstr, chatID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName,
 		&c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &state, &params)
 	if err != nil {
@@ -218,7 +229,7 @@ func (m Model) ChatByChatID(chatID int64) (*model.Chat, error) {
 }
 
 // ChatsByParam retrieves chats with chat.Params matching param.
-func (m Model) ChatsByParam(param string) ([]*model.Chat, error) {
+func (m Model) ChatsByParam(param string) ([]*dbot.Chat, error) {
 	var err error
 	var state, params string
 
@@ -234,9 +245,9 @@ func (m Model) ChatsByParam(param string) ([]*model.Chat, error) {
 	}
 	defer q.Close()
 
-	chats := []*model.Chat{}
+	chats := []*dbot.Chat{}
 	for q.Next() {
-		c := model.Chat{}
+		c := dbot.Chat{}
 
 		err = q.Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName,
 			&c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &state, &params)

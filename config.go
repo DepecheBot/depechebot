@@ -1,7 +1,6 @@
 package depechebot
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -20,15 +19,6 @@ type Responser interface {
 type Responsers []Responser
 type ReqToRes map[Request]Responser
 
-//type State string
-type StateName string
-type jsonMap string
-type Params jsonMap
-type State struct {
-	Name       StateName `json:"name"`
-	Params     jsonMap   `json:"params"`
-	skipBefore bool
-}
 type Text struct {
 	Text      string
 	ParseMode string
@@ -63,12 +53,12 @@ func NewPhotoWithCaption(fileID string, caption string) Photo {
 func NewState(s string) State {
 	return State{
 		Name:   StateName(s),
-		Params: "{}",
+		Params: Params{},
 	}
 }
 
 func NewParams(key, value string) Params {
-	params := Params(jsonMap("{}"))
+	params := Params{}
 	params.Set(key, value)
 	return params
 }
@@ -87,69 +77,47 @@ func NewUnprescribedRequest() Request {
 	}
 }
 
-func (state State) SkippedBefore() State {
-	state.skipBefore = true
-	return state
-}
-
-func (state State) WithParam(key, value string) State {
-	newState := state
-	(&newState.Params).Set(key, value)
+func (s State) SkippedBefore() State {
+	newState := s
+	newState.skipBefore = true
 	return newState
 }
 
-func (state State) String() string {
-	if state.Params != "{}" {
-		return fmt.Sprintf("%v with params: %v", state.Name, state.Params)
+func (s State) WithParam(key, value string) State {
+	newState := s
+	newState.Params = s.Params.With(key, value)
+	return newState
+}
+
+func (s State) String() string {
+	if len(s.Params) != 0 {
+		return fmt.Sprintf("%v with params: %v", s.Name, s.Params)
 	} else {
-		return fmt.Sprintf("%v", state.Name)
+		return fmt.Sprintf("%v", s.Name)
 	}
 }
 
-func (params *Params) AddParams(newParams Params) {
-	var m1 map[string]string
-
-	json.Unmarshal([]byte(newParams), &m1)
-	//json.Unmarshal([]byte(params), &m2)
-	for key, value := range m1 {
-		params.Set(key, value)
+func (p *Params) AddParams(newParams Params) {
+	for key, value := range newParams {
+		p.Set(key, value)
 	}
-}
-
-func (jm jsonMap) Get(key string) string {
-	var m map[string]string
-
-	check(json.Unmarshal([]byte(jm), &m))
-	return m[key]
 }
 
 func (p Params) Get(key string) string {
-	return jsonMap(p).Get(key)
-}
-
-func (jm *jsonMap) Set(key, value string) {
-	var m map[string]string
-
-	err := json.Unmarshal([]byte(*jm), &m)
-	if err != nil {
-		log.Panicf("jm: %v, err: %v\n", jm, err)
-	}
-	m[key] = value
-	*jm = jsonMap(marshal(m))
+	return p[key]
 }
 
 func (p *Params) Set(key, value string) {
-	(*jsonMap)(p).Set(key, value)
-}
-
-func (jm jsonMap) With(key, value string) jsonMap {
-	newJM := jm
-	(&newJM).Set(key, value)
-	return newJM
+	(*p)[key] = value
 }
 
 func (p Params) With(key, value string) Params {
-	return Params(jsonMap(p).With(key, value))
+	newParams := Params{}
+	for key, value := range p {
+		newParams.Set(key, value)
+	}
+	newParams.Set(key, value)
+	return newParams
 }
 
 var (
@@ -181,7 +149,7 @@ func StateBefore(text Text, keyboard interface{}) func(bot Bot, chat Chat) {
 			}
 		}
 
-		bot.SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
+		bot.SendChan <- ChatSignal{msg, chat.ChatID}
 	}
 }
 
@@ -205,7 +173,7 @@ func (text Text) Response(bot Bot, chat Chat, update tgbotapi.Update, state *Sta
 	if text.Text != "" {
 		msg := tgbotapi.NewMessage(int64(chat.ChatID), text.Text)
 		msg.ParseMode = text.ParseMode
-		bot.SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
+		bot.SendChan <- ChatSignal{msg, chat.ChatID}
 	}
 }
 
@@ -214,7 +182,7 @@ func (photo Photo) Response(bot Bot, chat Chat, update tgbotapi.Update, state *S
 	if photo.Caption != "" {
 		msg.Caption = photo.Caption
 	}
-	bot.SendChan <- ChatSignal{msg, ChatIDType(chat.ChatID)}
+	bot.SendChan <- ChatSignal{msg, chat.ChatID}
 }
 
 func (newState State) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {

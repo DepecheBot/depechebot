@@ -1,12 +1,9 @@
 package depechebot
 
 import (
-	"encoding/json"
 	"log"
 	"time"
 
-	db "github.com/depechebot/depechebot/database"
-	models "github.com/depechebot/depechebot/database/models"
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
 )
 
@@ -17,26 +14,16 @@ const (
 	telegramTimeout      = 60 //msec
 )
 
-type Chat models.Chat
-
-// todo: split, do we need to store it together?
-type ChatChan struct {
-	*models.Chat
-	signalChan chan Signal
-}
-
-type ChatIDType int64
-
 // Signal could be either tgbotapi.Chattable (or tgbotapi.MessageConfig),
 // State (interrupt state) or tgbotapi.Update
 type Signal interface{}
 type ChatSignal struct {
 	Signal
-	ChatID ChatIDType
+	ChatID ChatID
 }
 type BroadSignal struct {
 	Signal
-	List []ChatIDType
+	List []ChatID
 }
 
 type Config struct {
@@ -46,23 +33,23 @@ type Config struct {
 	ChatLog             func(tgbotapi.Update, Chat)
 	StatesConfigPrivate map[StateName]StateActions
 	StatesConfigGroup   map[StateName]StateActions
-	DBName              string
+	Model               Model
 }
 
 type Bot struct {
 	SendChan      chan ChatSignal
 	SendBroadChan chan BroadSignal
 
-	config Config
-	chats  map[int]*ChatChan
-	api    *tgbotapi.BotAPI
+	config     Config
+	chatsChans map[ChatID]chan Signal
+	api        *tgbotapi.BotAPI
 }
 
 func New(c Config) (Bot, error) {
 	var err error
 
 	bot := Bot{config: c}
-	bot.chats = make(map[int]*ChatChan)
+	bot.chatsChans = make(map[ChatID]chan Signal)
 	bot.SendChan = make(chan ChatSignal, sendChanBufSize)
 	bot.SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
 
@@ -79,20 +66,18 @@ func (b Bot) Run() {
 
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
-	db.InitDB(b.config.DBName)
-	defer db.DB.Close()
-	err = db.LoadChatsFromDB()
-	check(err)
-
-	var i int
-	var chat *models.Chat
-	for i, chat = range db.Chats {
-		b.chats[chat.ChatID] = &ChatChan{chat, make(chan Signal, chatChanBufSize)}
+	chatIDs, err := b.config.Model.Init()
+	if err != nil {
+		log.Panic(err)
 	}
-	log.Printf("Loaded %v chats from DB file %v\n", i+1, b.config.DBName)
+	log.Printf("Loaded %v chats\n", len(chatIDs))
 
-	for _, chat = range db.Chats {
-		go b.processChat(b.chats[chat.ChatID].Chat, b.chats[chat.ChatID].signalChan)
+	for _, chatID := range chatIDs {
+		b.chatsChans[chatID] = make(chan Signal, chatChanBufSize)
+	}
+
+	for _, chatID := range chatIDs {
+		go b.processChat(chatID, b.chatsChans[chatID])
 	}
 
 	go b.processSendChan()
@@ -116,43 +101,39 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 			continue
 		}
 
-		chatID := int(update.Message.Chat.ID) // todo: fix int() for 32-bit
-		chat, ok := b.chats[chatID]
+		chatID := ChatID(update.Message.Chat.ID)
+		chatChan, ok := b.chatsChans[chatID]
 
 		if !ok {
-			chat = &ChatChan{}
-			b.chats[chatID] = chat
-
-			chat.Chat = &models.Chat{
+			chat := &Chat{
 				ChatID:    chatID,
-				Abandoned: bool2int(false),
+				Abandoned: false,
 				Type:      update.Message.Chat.Type,
 				UserID:    update.Message.From.ID,
 				UserName:  update.Message.From.UserName,
 				FirstName: update.Message.From.FirstName,
 				LastName:  update.Message.From.LastName,
-				OpenTime:  time.Now().String(),
-				LastTime:  time.Now().String(),
-				State:     marshal(StartState),
-				Params:    "{}",
+				OpenTime:  time.Now(),
+				LastTime:  time.Now(),
+				State:     StartState,
+				Params:    Params{},
 			}
-		}
-
-		if chat.signalChan == nil {
-			chat.signalChan = make(chan Signal, chatChanBufSize)
-			go b.processChat(chat.Chat, chat.signalChan)
+			b.config.Model.Insert(chat)
+			chatChan = make(chan Signal, chatChanBufSize)
+			b.chatsChans[chatID] = chatChan
+			go b.processChat(chatID, chatChan)
 		}
 
 		select {
-		case chat.signalChan <- update:
+		case chatChan <- update:
 		default:
 			log.Printf("Channel buffer for chat %v is full!", chatID)
-			log.Println(chat.signalChan) // todo: print buffer here, not interface{}
+			log.Println(chatChan) // todo: print buffer here, not interface{}
 		}
 	}
 }
 
-func (b Bot) updateChat(update tgbotapi.Update, chat *models.Chat) {
+func (b Bot) updateChat(update tgbotapi.Update, chat *Chat) {
 
 	var abandoned = false
 	// checked either bot is kicked itself or he is alone now
@@ -161,7 +142,9 @@ func (b Bot) updateChat(update tgbotapi.Update, chat *models.Chat) {
 			abandoned = true
 		} else {
 			count, err := b.api.GetChatMembersCount(update.Message.Chat.ChatConfig())
-			check(err)
+			if err != nil {
+				log.Panic(err)
+			}
 			if count == 1 {
 				abandoned = true
 				b.api.LeaveChat(update.Message.Chat.ChatConfig())
@@ -180,24 +163,27 @@ func (b Bot) updateChat(update tgbotapi.Update, chat *models.Chat) {
 		// todo: need to do more here to migrate
 	}
 
-	chat.Abandoned = bool2int(abandoned)
+	chat.Abandoned = abandoned
 	chat.UserName = update.Message.From.UserName
 	chat.FirstName = update.Message.From.FirstName
 	chat.LastName = update.Message.From.LastName
-	chat.LastTime = time.Now().String()
+	chat.LastTime = time.Now()
 
 	// todo: is it correct?
 	if abandoned {
-		chat.State = marshal(StartState)
+		chat.State = StartState
 	}
 }
 
 // goroutine
-func (b Bot) processChat(chat *models.Chat, signalChan <-chan Signal) {
+func (b Bot) processChat(chatID ChatID, signalChan <-chan Signal) {
 	var update tgbotapi.Update
-	var state State
-	var params Params
 	var statesConfig map[StateName]StateActions
+
+	chat, err := b.config.Model.ChatByChatID(chatID)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	if chat.Type == "private" {
 		statesConfig = b.config.StatesConfigPrivate
@@ -206,16 +192,13 @@ func (b Bot) processChat(chat *models.Chat, signalChan <-chan Signal) {
 	}
 
 	for {
-		err := json.Unmarshal([]byte(chat.State), &state)
-		check(err)
-		params = Params(jsonMap(chat.Params))
 
-		if _, ok := statesConfig[state.Name]; !ok {
-			log.Panicf("No such state: %v", state.Name)
+		if _, ok := statesConfig[chat.State.Name]; !ok {
+			log.Panicf("No such state: %v", chat.State.Name)
 		}
 
-		while := statesConfig[state.Name].While
-		after := statesConfig[state.Name].After
+		while := statesConfig[chat.State.Name].While
+		after := statesConfig[chat.State.Name].After
 		if while != nil {
 		WhileLoop:
 			for {
@@ -228,9 +211,8 @@ func (b Bot) processChat(chat *models.Chat, signalChan <-chan Signal) {
 					b.config.ChatLog(update, Chat(*chat))
 					break WhileLoop
 				case State:
-					state = signal
-					chat.State = marshal(state)
-					log.Printf("    Interrupted with state: %v", state)
+					chat.State = signal
+					log.Printf("    Interrupted with state: %v", chat.State)
 					goto BeforeLabel
 				case tgbotapi.MessageConfig:
 					msg := signal
@@ -239,7 +221,7 @@ func (b Bot) processChat(chat *models.Chat, signalChan <-chan Signal) {
 					if err != nil {
 						log.Printf("Failed to send (%v): error \"%v\"\n", marshal(msg), err)
 						if err.Error() == "forbidden" {
-							chat.Abandoned = bool2int(true)
+							chat.Abandoned = true
 						}
 					}
 					continue WhileLoop
@@ -250,7 +232,7 @@ func (b Bot) processChat(chat *models.Chat, signalChan <-chan Signal) {
 					if err != nil {
 						log.Printf("Failed to send (%v): error \"%v\"\n", marshal(msg), err)
 						if err.Error() == "forbidden" {
-							chat.Abandoned = bool2int(true)
+							chat.Abandoned = true
 						}
 					}
 					continue WhileLoop
@@ -262,23 +244,23 @@ func (b Bot) processChat(chat *models.Chat, signalChan <-chan Signal) {
 
 		// todo: consider chat.Abandoned from here?
 		if after != nil {
-			after(b, Chat(*chat), update, &state, &params) // todo: fix int64
-			chat.State = marshal(state)
-			chat.Params = string(params)
+			after(b, Chat(*chat), update, &chat.State, &chat.Params)
 
-			log.Printf("    State after: %v", state)
+			log.Printf("    State after: %v", chat.State)
 		}
 
 	BeforeLabel:
-		if !state.skipBefore {
-			before := statesConfig[state.Name].Before // todo: fix int64
+		if !chat.State.skipBefore {
+			before := statesConfig[chat.State.Name].Before
 			if before != nil {
-				before(b, Chat(*chat)) // todo: fix int64
+				before(b, Chat(*chat))
 			}
 		}
 
-		// defer() this?
-		chat.Save(db.DB)
+		err = b.config.Model.Update(chat)
+		if err != nil {
+			log.Panic(err)
+		}
 	}
 }
 
@@ -290,7 +272,7 @@ func (b Bot) processSendChan() {
 
 	for chatSignal := range b.SendChan {
 		// todo: fix race!
-		b.chats[int(chatSignal.ChatID)].signalChan <- chatSignal.Signal
+		b.chatsChans[chatSignal.ChatID] <- chatSignal.Signal
 		time.Sleep(commonDelay)
 	}
 }
@@ -304,7 +286,7 @@ func (b Bot) processSendBroadChan() {
 	for broadSignal := range b.SendBroadChan {
 		for _, chatID := range broadSignal.List {
 			// todo: fix race!
-			b.chats[int(chatID)].signalChan <- broadSignal.Signal
+			b.chatsChans[chatID] <- broadSignal.Signal
 			time.Sleep(commonDelay)
 		}
 	}
