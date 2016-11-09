@@ -3,6 +3,7 @@ package sql
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	dbot "github.com/depechebot/depechebot"
 )
@@ -183,6 +184,11 @@ func (m Model) ChatByPrimaryID(primaryID int) (*dbot.Chat, error) {
 		&c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &state, &params)
 	if err != nil {
 		return nil, err
+		if err == sql.ErrNoRows {
+			return nil, errors.New("chat not found (use Model.Exist() before if not sure)")
+		} else {
+			return nil, err
+		}
 	}
 
 	err = json.Unmarshal([]byte(state), &c.State)
@@ -212,7 +218,11 @@ func (m Model) ChatByChatID(chatID dbot.ChatID) (*dbot.Chat, error) {
 	err = m.db.QueryRow(sqlstr, chatID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName,
 		&c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &state, &params)
 	if err != nil {
-		return nil, err
+		if err == sql.ErrNoRows {
+			return nil, errors.New("chat not found (use Model.Exist() before if not sure)")
+		} else {
+			return nil, err
+		}
 	}
 
 	err = json.Unmarshal([]byte(state), &c.State)
@@ -241,7 +251,11 @@ func (m Model) ChatsByParam(param string) ([]*dbot.Chat, error) {
 
 	q, err := m.db.Query(sqlstr, param)
 	if err != nil {
-		return nil, err
+		if err == sql.ErrNoRows {
+			return []*dbot.Chat{}, nil
+		} else {
+			return nil, err
+		}
 	}
 	defer q.Close()
 
