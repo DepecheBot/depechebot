@@ -2,6 +2,7 @@ package depechebot
 
 import (
 	"log"
+	"sync"
 	"time"
 
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
@@ -41,15 +42,18 @@ type Bot struct {
 	SendBroadChan chan BroadSignal
 
 	config     Config
-	chatsChans map[ChatID]chan Signal
-	api        *tgbotapi.BotAPI
+	chatsChans struct {
+		sync.RWMutex
+		m map[ChatID]chan Signal
+	}
+	api *tgbotapi.BotAPI
 }
 
 func New(c Config) (Bot, error) {
 	var err error
 
 	bot := Bot{config: c}
-	bot.chatsChans = make(map[ChatID]chan Signal)
+	bot.chatsChans.m = make(map[ChatID]chan Signal)
 	bot.SendChan = make(chan ChatSignal, sendChanBufSize)
 	bot.SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
 
@@ -73,11 +77,13 @@ func (b Bot) Run() {
 	log.Printf("Loaded %v chats\n", len(chatIDs))
 
 	for _, chatID := range chatIDs {
-		b.chatsChans[chatID] = make(chan Signal, chatChanBufSize)
+		b.chatsChans.m[chatID] = make(chan Signal, chatChanBufSize)
 	}
 
 	for _, chatID := range chatIDs {
-		go b.processChat(chatID, b.chatsChans[chatID])
+		b.chatsChans.RLock()
+		go b.processChat(chatID, b.chatsChans.m[chatID])
+		b.chatsChans.RUnlock()
 	}
 
 	go b.processSendChan()
@@ -102,7 +108,9 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 		}
 
 		chatID := ChatID(update.Message.Chat.ID)
-		chatChan, ok := b.chatsChans[chatID]
+		b.chatsChans.RLock()
+		chatChan, ok := b.chatsChans.m[chatID]
+		b.chatsChans.RUnlock()
 
 		if !ok {
 			chat := &Chat{
@@ -120,7 +128,9 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 			}
 			b.config.Model.Insert(chat)
 			chatChan = make(chan Signal, chatChanBufSize)
-			b.chatsChans[chatID] = chatChan
+			b.chatsChans.Lock()
+			b.chatsChans.m[chatID] = chatChan
+			b.chatsChans.Unlock()
 			go b.processChat(chatID, chatChan)
 		}
 
@@ -271,8 +281,9 @@ func (b Bot) processSendChan() {
 	)
 
 	for chatSignal := range b.SendChan {
-		// todo: fix race!
-		b.chatsChans[chatSignal.ChatID] <- chatSignal.Signal
+		b.chatsChans.RLock()
+		b.chatsChans.m[chatSignal.ChatID] <- chatSignal.Signal
+		b.chatsChans.RUnlock()
 		time.Sleep(commonDelay)
 	}
 }
@@ -285,8 +296,9 @@ func (b Bot) processSendBroadChan() {
 
 	for broadSignal := range b.SendBroadChan {
 		for _, chatID := range broadSignal.List {
-			// todo: fix race!
-			b.chatsChans[chatID] <- broadSignal.Signal
+			b.chatsChans.RLock()
+			b.chatsChans.m[chatID] <- broadSignal.Signal
+			b.chatsChans.RUnlock()
 			time.Sleep(commonDelay)
 		}
 	}
