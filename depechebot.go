@@ -126,7 +126,10 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 				State:     StartState,
 				Params:    Params{},
 			}
-			b.config.Model.Insert(chat)
+			err := b.config.Model.Insert(chat)
+			if err != nil {
+				log.Panic(err)
+			}
 			chatChan = make(chan Signal, chatChanBufSize)
 			b.chatsChans.Lock()
 			b.chatsChans.m[chatID] = chatChan
