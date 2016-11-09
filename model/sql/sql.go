@@ -62,13 +62,13 @@ func (m Model) createTable() error {
   primary_id INTEGER NOT NULL PRIMARY KEY,
   chat_id BIGINT UNIQUE NOT NULL,
   type TEXT NOT NULL,
-  abandoned INTEGER NOT NULL,
+  abandoned BOOLEAN NOT NULL,
   user_id INTEGER NOT NULL,
   user_name TEXT NOT NULL DEFAULT '',
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
-  open_time DATETIME NOT NULL,
-  last_time DATETIME NOT NULL,
+  open_time TIMESTAMP NOT NULL,
+  last_time TIMESTAMP NOT NULL,
   state TEXT NOT NULL,
   params TEXT NOT NULL
 );
@@ -94,7 +94,7 @@ func (m Model) Insert(c *dbot.Chat) error {
 	const sqlstr = `INSERT INTO chat (` +
 		`chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params` +
 		`) VALUES (` +
-		`?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?` +
+		`$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11` +
 		`)`
 
 	state, err := json.Marshal(c.State)
@@ -127,8 +127,8 @@ func (m Model) Update(c *dbot.Chat) error {
 	var err error
 
 	const sqlstr = `UPDATE chat SET ` +
-		`primary_id = ?, type = ?, abandoned = ?, user_id = ?, user_name = ?, first_name = ?, last_name = ?, open_time = ?, last_time = ?, state = ?, params = ?` +
-		` WHERE chat_id = ?`
+		`primary_id = $1, type = $2, abandoned = $3, user_id = $4, user_name = $5, first_name = $6, last_name = $7, open_time = $8, last_time = $9, state = $10, params = $11` +
+		` WHERE chat_id = $12`
 
 	state, err := json.Marshal(c.State)
 	if err != nil {
@@ -163,7 +163,7 @@ func (m Model) Save(c *dbot.Chat) error {
 func (m Model) Delete(c *dbot.Chat) error {
 	var err error
 
-	const sqlstr = `DELETE FROM chat WHERE chat_id = ?`
+	const sqlstr = `DELETE FROM chat WHERE chat_id = $1`
 
 	_, err = m.db.Exec(sqlstr, c.ChatID)
 	return err
@@ -177,7 +177,7 @@ func (m Model) ChatByPrimaryID(primaryID int) (*dbot.Chat, error) {
 	const sqlstr = `SELECT ` +
 		`primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params ` +
 		`FROM chat ` +
-		`WHERE primary_id = ?`
+		`WHERE primary_id = $1`
 
 	c := dbot.Chat{}
 	err = m.db.QueryRow(sqlstr, primaryID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName,
@@ -212,7 +212,7 @@ func (m Model) ChatByChatID(chatID dbot.ChatID) (*dbot.Chat, error) {
 	const sqlstr = `SELECT ` +
 		`primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params ` +
 		`FROM chat ` +
-		`WHERE chat_id = ?`
+		`WHERE chat_id = $1`
 
 	c := dbot.Chat{}
 	err = m.db.QueryRow(sqlstr, chatID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName,
@@ -247,7 +247,7 @@ func (m Model) ChatsByParam(param string) ([]*dbot.Chat, error) {
 		`primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params ` +
 		`FROM chat ` +
 		`WHERE ` +
-		`params like "%" || ? || "%"`
+		`params like "%" || $1 || "%"`
 
 	q, err := m.db.Query(sqlstr, param)
 	if err != nil {
