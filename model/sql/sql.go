@@ -183,7 +183,6 @@ func (m Model) ChatByPrimaryID(primaryID int) (*dbot.Chat, error) {
 	err = m.db.QueryRow(sqlstr, primaryID).Scan(&c.PrimaryID, &c.ChatID, &c.Type, &c.Abandoned, &c.UserID, &c.UserName,
 		&c.FirstName, &c.LastName, &c.OpenTime, &c.LastTime, &state, &params)
 	if err != nil {
-		return nil, err
 		if err == sql.ErrNoRows {
 			return nil, errors.New("chat not found (use Model.Exist() before if not sure)")
 		} else {

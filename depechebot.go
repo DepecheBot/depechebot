@@ -43,7 +43,7 @@ type Bot struct {
 
 	config     Config
 	chatsChans struct {
-		sync.RWMutex
+		*sync.RWMutex
 		m map[ChatID]chan Signal
 	}
 	api *tgbotapi.BotAPI
@@ -53,6 +53,7 @@ func New(c Config) (Bot, error) {
 	var err error
 
 	bot := Bot{config: c}
+	bot.chatsChans.RWMutex = &sync.RWMutex{}
 	bot.chatsChans.m = make(map[ChatID]chan Signal)
 	bot.SendChan = make(chan ChatSignal, sendChanBufSize)
 	bot.SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
