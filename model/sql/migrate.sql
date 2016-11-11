@@ -18,7 +18,7 @@ CREATE TABLE chat2 (
 insert into chat2
 (primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, state, params)
 select
-primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, replace(state, '"params":"{}"', '"params":{}'), params
+primary_id, chat_id, type, abandoned, user_id, user_name, first_name, last_name, open_time, last_time, replace(state, '"params":"{}"', '"params":{}'), replace(params, char(10), ", ")
 from chat;
 
 alter table chat rename to chat_old2;

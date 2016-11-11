@@ -196,7 +196,7 @@ func (b Bot) processChat(chatID ChatID, signalChan <-chan Signal) {
 
 	chat, err := b.config.Model.ChatByChatID(chatID)
 	if err != nil {
-		log.Panic(err)
+		log.Panicf("Error: %v, chatID: %v", err, chatID)
 	}
 
 	if chat.Type == "private" {
