@@ -40,8 +40,8 @@ type Config struct {
 type Bot struct {
 	SendChan      chan ChatSignal
 	SendBroadChan chan BroadSignal
+	Config
 
-	config     Config
 	chatsChans struct {
 		*sync.RWMutex
 		m map[ChatID]chan Signal
@@ -52,13 +52,13 @@ type Bot struct {
 func New(c Config) (Bot, error) {
 	var err error
 
-	bot := Bot{config: c}
+	bot := Bot{Config: c}
 	bot.chatsChans.RWMutex = &sync.RWMutex{}
 	bot.chatsChans.m = make(map[ChatID]chan Signal)
 	bot.SendChan = make(chan ChatSignal, sendChanBufSize)
 	bot.SendBroadChan = make(chan BroadSignal, sendBroadChanBufSize)
 
-	bot.api, err = tgbotapi.NewBotAPI(bot.config.TelegramToken)
+	bot.api, err = tgbotapi.NewBotAPI(bot.Config.TelegramToken)
 	if err != nil {
 		return bot, err
 	}
@@ -71,7 +71,7 @@ func (b Bot) Run() {
 
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
-	chatIDs, err := b.config.Model.Init()
+	chatIDs, err := b.Config.Model.Init()
 	if err != nil {
 		log.Panic(err)
 	}
@@ -101,7 +101,7 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 
 	for update := range updates {
 
-		b.config.CommonLog(update)
+		b.Config.CommonLog(update)
 
 		// todo: update.Query and so on...
 		if update.Message == nil {
@@ -127,7 +127,7 @@ func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
 				State:     StartState,
 				Params:    Params{},
 			}
-			err := b.config.Model.Insert(chat)
+			err := b.Config.Model.Insert(chat)
 			if err != nil {
 				log.Panic(err)
 			}
@@ -194,15 +194,15 @@ func (b Bot) processChat(chatID ChatID, signalChan <-chan Signal) {
 	var update tgbotapi.Update
 	var statesConfig map[StateName]StateActions
 
-	chat, err := b.config.Model.ChatByChatID(chatID)
+	chat, err := b.Config.Model.ChatByChatID(chatID)
 	if err != nil {
 		log.Panicf("Error: %v, chatID: %v", err, chatID)
 	}
 
 	if chat.Type == "private" {
-		statesConfig = b.config.StatesConfigPrivate
+		statesConfig = b.Config.StatesConfigPrivate
 	} else {
-		statesConfig = b.config.StatesConfigGroup
+		statesConfig = b.Config.StatesConfigGroup
 	}
 
 	for {
@@ -222,7 +222,7 @@ func (b Bot) processChat(chatID ChatID, signalChan <-chan Signal) {
 				case tgbotapi.Update:
 					update = signal
 					b.updateChat(update, chat)
-					b.config.ChatLog(update, Chat(*chat))
+					b.Config.ChatLog(update, Chat(*chat))
 					break WhileLoop
 				case State:
 					chat.State = signal
@@ -271,7 +271,7 @@ func (b Bot) processChat(chatID ChatID, signalChan <-chan Signal) {
 			}
 		}
 
-		err = b.config.Model.Update(chat)
+		err = b.Config.Model.Update(chat)
 		if err != nil {
 			log.Panic(err)
 		}
