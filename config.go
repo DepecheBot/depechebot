@@ -27,6 +27,9 @@ type Photo struct {
 	Caption string
 	FileID  string
 }
+type Document struct {
+	FileID string
+}
 type StateActions struct {
 	Before func(Bot, Chat)
 	While  func(Bot, <-chan Signal) Signal
@@ -48,6 +51,9 @@ func NewPhotoWithCaption(fileID string, caption string) Photo {
 		FileID:  fileID,
 		Caption: caption,
 	}
+}
+func NewDocument(s string) Document {
+	return Document{FileID: s}
 }
 
 func NewState(s string) State {
@@ -182,6 +188,11 @@ func (photo Photo) Response(bot Bot, chat Chat, update tgbotapi.Update, state *S
 	if photo.Caption != "" {
 		msg.Caption = photo.Caption
 	}
+	bot.SendChan <- ChatSignal{msg, chat.ChatID}
+}
+
+func (d Document) Response(bot Bot, chat Chat, update tgbotapi.Update, state *State, params *Params) {
+	msg := tgbotapi.NewDocumentShare(int64(chat.ChatID), d.FileID)
 	bot.SendChan <- ChatSignal{msg, chat.ChatID}
 }
 
