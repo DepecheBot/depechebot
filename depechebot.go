@@ -31,7 +31,7 @@ type Config struct {
 	TelegramToken string
 	//AdminLog func()
 	CommonLog           func(tgbotapi.Update)
-	ChatLog             func(tgbotapi.Update, Chat)
+	ChatLog             func(Bot, tgbotapi.Update, Chat)
 	StatesConfigPrivate map[StateName]StateActions
 	StatesConfigGroup   map[StateName]StateActions
 	Model               Model
@@ -222,7 +222,7 @@ func (b Bot) processChat(chatID ChatID, signalChan <-chan Signal) {
 				case tgbotapi.Update:
 					update = signal
 					b.updateChat(update, chat)
-					b.Config.ChatLog(update, Chat(*chat))
+					b.Config.ChatLog(b, update, Chat(*chat))
 					break WhileLoop
 				case State:
 					chat.State = signal
