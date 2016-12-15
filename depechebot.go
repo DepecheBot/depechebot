@@ -307,9 +307,7 @@ func (b Bot) processSendChan() {
 	)
 
 	for chatSignal := range b.SendChan {
-		b.chatsChans.RLock()
-		b.chatsChans.m[chatSignal.ChatID] <- chatSignal.Signal
-		b.chatsChans.RUnlock()
+		b.sendSignal(chatSignal.ChatID, chatSignal.Signal)
 		time.Sleep(commonDelay)
 	}
 }
@@ -322,10 +320,18 @@ func (b Bot) processSendBroadChan() {
 
 	for broadSignal := range b.SendBroadChan {
 		for _, chatID := range broadSignal.List {
-			b.chatsChans.RLock()
-			b.chatsChans.m[chatID] <- broadSignal.Signal
-			b.chatsChans.RUnlock()
+			b.sendSignal(chatID, broadSignal.Signal)
 			time.Sleep(commonDelay)
 		}
 	}
+}
+
+func (b Bot) sendSignal(chatID ChatID, signal Signal) {
+	b.chatsChans.RLock()
+	if b.chatsChans.m[chatID] == nil {
+		b.chatsChans.m[chatID] = make(chan Signal, chatChanBufSize)
+		go b.processChat(chatID, b.chatsChans.m[chatID])
+	}
+	b.chatsChans.m[chatID] <- signal
+	b.chatsChans.RUnlock()
 }
