@@ -328,10 +328,12 @@ func (b Bot) processSendBroadChan() {
 
 func (b Bot) sendSignal(chatID ChatID, signal Signal) {
 	b.chatsChans.RLock()
-	if b.chatsChans.m[chatID] == nil {
-		b.chatsChans.m[chatID] = make(chan Signal, chatChanBufSize)
-		go b.processChat(chatID, b.chatsChans.m[chatID])
+	// if b.chatsChans.m[chatID] == nil {
+	// 	b.chatsChans.m[chatID] = make(chan Signal, chatChanBufSize)
+	// 	go b.processChat(chatID, b.chatsChans.m[chatID])
+	// }
+	if b.chatsChans.m[chatID] != nil {
+		b.chatsChans.m[chatID] <- signal
 	}
-	b.chatsChans.m[chatID] <- signal
 	b.chatsChans.RUnlock()
 }
