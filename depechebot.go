@@ -261,6 +261,17 @@ func (b Bot) processChat(chatID ChatID, signalChan <-chan Signal) {
 						}
 					}
 					continue WhileLoop
+				case tgbotapi.AudioConfig:
+					msg := signal
+					msg.ChatID = int64(chat.ChatID)
+					_, err := b.api.Send(msg)
+					if err != nil {
+						log.Printf("Failed to send (%v): error \"%v\"\n", marshal(msg), err)
+						if err.Error() == "forbidden" {
+							chat.Abandoned = true
+						}
+					}
+					continue WhileLoop
 				case tgbotapi.Chattable: // todo: leave only one of Message/PhotoConfig and Chattable
 					msg := signal
 					// fix ChatID in this message!!
