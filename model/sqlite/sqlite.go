@@ -27,6 +27,10 @@ func (m Model) Init() (chatIDs []dbot.ChatID, err error) {
 		return nil, err
 	}
 
+	// slowing this model down cause of this bug:
+	// https://github.com/mattn/go-sqlite3/issues/274
+	m.db.SetMaxOpenConns(1)
+
 	err = m.createTable()
 	if err != nil {
 		return nil, err
