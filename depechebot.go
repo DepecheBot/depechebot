@@ -46,7 +46,9 @@ type Bot struct {
 		*sync.RWMutex
 		m map[ChatID]chan Signal
 	}
-	api *tgbotapi.BotAPI
+	api         *tgbotapi.BotAPI
+	updatesChan <-chan tgbotapi.Update
+	stopChan    chan<- struct{}
 }
 
 func New(c Config) (Bot, error) {
@@ -66,6 +68,7 @@ func New(c Config) (Bot, error) {
 	return bot, nil
 }
 
+// Run runs bot and blocks
 func (b Bot) Run() {
 	var err error
 
@@ -92,14 +95,24 @@ func (b Bot) Run() {
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = telegramTimeout
-	updates, err := b.api.GetUpdatesChan(u)
+	b.updatesChan, b.stopChan, err = GetUpdatesChan(b.api, u)
+	if err != nil {
+		log.Panic(err)
+	}
 
-	b.processUpdates(updates)
+	b.processUpdatesChan()
 }
 
-func (b Bot) processUpdates(updates <-chan tgbotapi.Update) {
+func (b Bot) Stop() {
+	// todo: one should terminate chat's goroutines as well
+	b.stopChan <- struct{}{}
+	close(b.SendBroadChan)
+	close(b.SendChan)
+}
 
-	for update := range updates {
+func (b Bot) processUpdatesChan() {
+
+	for update := range b.updatesChan {
 
 		b.Config.CommonLog(update)
 
