@@ -12,7 +12,7 @@ const (
 	chatChanBufSize      = 100
 	sendChanBufSize      = 1000
 	sendBroadChanBufSize = 100
-	telegramTimeout      = 60 //msec
+	telegramTimeout      = 50 //sec. Looks like for now 50 sec is Telegram servers maximum as well
 )
 
 // Signal could be either tgbotapi.Chattable (or tgbotapi.MessageConfig/PhotoConfig),
@@ -69,7 +69,7 @@ func New(c Config) (Bot, error) {
 }
 
 // Run runs bot and blocks
-func (b Bot) Run() {
+func (b *Bot) Run() {
 	var err error
 
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
@@ -103,11 +103,16 @@ func (b Bot) Run() {
 	b.processUpdatesChan()
 }
 
+// Stop stops bot.
+// For now, one have to wait about 25 sec on the average (= timeoutTelegram/2)
+// to stop bot, since one cannot cancel long polling (see GetUpdates() in tgbotapi_fixes.go)
 func (b Bot) Stop() {
 	// todo: one should terminate chat's goroutines as well
+	log.Printf("Stopping %s...", b.api.Self.UserName)
 	b.stopChan <- struct{}{}
 	close(b.SendBroadChan)
 	close(b.SendChan)
+	log.Printf("Stopped %s", b.api.Self.UserName)
 }
 
 func (b Bot) processUpdatesChan() {

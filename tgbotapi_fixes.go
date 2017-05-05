@@ -11,7 +11,7 @@ import (
 // GetUpdatesChan fixes tgbotapi function by adding stop signal channel
 func GetUpdatesChan(bot *tgbotapi.BotAPI, config tgbotapi.UpdateConfig) (<-chan tgbotapi.Update, chan<- struct{}, error) {
 	updatesChan := make(chan tgbotapi.Update, 100)
-	stopChan := make(chan struct{}, 1)
+	stopChan := make(chan struct{})
 
 	go func() {
 		for {
